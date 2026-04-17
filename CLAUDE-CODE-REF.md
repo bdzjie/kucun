@@ -115,6 +115,45 @@
 - `entrypoints/init.ts` — 初始化主逻辑
 - Feature 门控：BRIDGE_MODE/DAEMON/BG_SESSIONS/TEMPLATES
 
+## CLI Transport System
+- `cli/transports/HybridTransport.ts` — WebSocket 读 + HTTP POST 写
+- `cli/transports/SSETransport.ts` — SSE 读 + HTTP POST 写
+- `cli/transports/WebSocketTransport.ts` — WebSocket 全双工
+- 特性：自动重连 + 心跳 + 背压 + 消息缓冲
+
+## StructuredIO SDK 协议
+- `cli/structuredIO.ts` — SDK 协议实现
+- StdinMessage/StdoutMessage 类型
+- pendingRequests Map + resolvedToolUseIds Set
+
+## 常量定义
+- `constants/apiLimits.ts` — API 限制（图片/PDF/工具结果）
+- `constants/betas.ts` — Beta 头部
+- `constants/system.ts` — CLI 前缀 + 归因头部
+
+## Remote Session 远程会话
+- `remote/RemoteSessionManager.ts` — 远程会话管理
+- `remote/SessionsWebSocket.ts` — WebSocket 订阅
+- `server/createDirectConnectSession.ts` — DirectConnect 会话创建
+
+## UpstreamProxy 上游代理
+- `upstreamproxy/upstreamproxy.ts` — CCR 容器代理初始化
+- `upstreamproxy/relay.ts` — CONNECT-over-WebSocket 中继
+- NO_PROXY 列表 + MITM CA 证书
+
+## OutputStyles 输出样式
+- `outputStyles/loadOutputStylesDir.ts` — 加载 .md 样式文件
+- frontmatter 解析（name/description）
+
+## Graceful Shutdown
+- `utils/gracefulShutdown.ts` — 优雅退出
+- 信号处理：SIGINT/SIGTERM/SIGHUP
+- 退出流程：cleanup → hooks → analytics → forceExit
+
+## Doctor 诊断
+- `screens/Doctor.tsx` — 诊断检查 UI
+- 检查项：版本/Agent/MCP/插件/锁/验证错误
+
 ## 特性开关
 `COORDINATOR_MODE` / `KAIROS` / `VOICE_MODE` / `PROACTIVE` / `BASH_CLASSIFIER` / `CONTEXT_COLLAPSE` / `REACTIVE_COMPACT` / `MCP_SKILLS` / `QUICK_SEARCH` / `TERMINAL_PANEL` / `MESSAGE_ACTIONS`
 

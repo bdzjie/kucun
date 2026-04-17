@@ -4,7 +4,7 @@
 
 ## 关于 Claude Code 源码分析
 
-**补充学习日期**: 2026-04-17（第二轮：ExtractMemories + PromptSuggestion + autoDream + Entrypoints）
+**补充学习日期**: 2026-04-17（第三轮：CLI Transport + Remote Session + UpstreamProxy + Doctor）
 
 **分析日期**: 2026-04-17
 **源码位置**: `E:\claude-code-main`
@@ -63,6 +63,31 @@ Claude Code 是一个**流式 AI Agent + 工具化 + 分层权限 + 智能上下
 - `entrypoints/init.ts` — 完整初始化流水线（17 个步骤）
 - Feature 门控：BRIDGE_MODE/DAEMON/BG_SESSIONS/TEMPLATES
 
+### CLI Transport System
+- `cli/transports/` — HybridTransport + SSETransport + WebSocketTransport
+- 特性：自动重连 + 心跳 + 背压 + 消息缓冲
+
+### StructuredIO SDK 协议
+- `cli/structuredIO.ts` — SDK 消息协议
+- pendingRequests + resolvedToolUseIds 去重
+
+### Remote Session 远程会话
+- `remote/RemoteSessionManager.ts` — 远程 CCR 会话管理
+- `server/createDirectConnectSession.ts` — DirectConnect 会话创建
+
+### UpstreamProxy 上游代理
+- `upstreamproxy/` — CCR 容器内 HTTPS MITM 代理
+- CONNECT-over-WebSocket relay
+
+### OutputStyles 输出样式
+- `outputStyles/loadOutputStylesDir.ts` — Markdown 样式加载
+
+### Graceful Shutdown
+- `utils/gracefulShutdown.ts` — 信号处理 + 优雅退出
+
+### Doctor 诊断
+- `screens/Doctor.tsx` — 诊断检查 UI
+
 ---
 
 ## 新增覆盖模块（第一轮）
@@ -98,7 +123,7 @@ Claude Code 是一个**流式 AI Agent + 工具化 + 分层权限 + 智能上下
 
 更多内容存储在：
 
-- `memory/claude-code-architecture.md` — 完整架构知识库（包含 33 个章节）
+- `memory/claude-code-architecture.md` — 完整架构知识库（包含 42 个章节）
 - `memory/2026-04-17-claude-code-analysis.md` — 深度分析笔记
 
 ---

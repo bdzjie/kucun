@@ -1026,4 +1026,389 @@ interface AgentSession {
 
 ---
 
+## 三十四、CLI 传输层 — `cli/transports/`
+
+### 34.1 HybridTransport — 混合传输（WebSocket + HTTP POST）
+
+```
+写入流程：
+write(stream_event) → 100ms 缓冲 → 批量 POST
+write(other) → uploader.enqueue() → 串行 POST + 重试
+
+特点：
+- WebSocket 读取，HTTP POST 写入
+- stream_event 延迟缓冲（减少 POST 次数）
+- 串行化 + 背压（maxQueueSize: 100_000）
+- 指数退避 + 抖动重试
+```
+
+### 34.2 SSETransport — Server-Sent Events 传输
+
+```
+读取：SSE 流（/events/stream）
+写入：HTTP POST（/events）
+
+特性：
+- 自动重连（指数退避，最多 10 分钟）
+- Last-Event-ID 续传
+- 心跳检测（45s 无活动判定死亡）
+- 重复帧去重（seenSequenceNums Set）
+```
+
+### 34.3 WebSocketTransport — WebSocket 传输
+
+```
+读取 + 写入：WebSocket
+
+特性：
+- 自动重连（可配置关闭）
+- Ping/Pong 心跳
+- keep_alive 数据帧（防止代理空闲超时）
+- 消息缓冲 + 重连重放
+- 睡眠/唤醒检测（60s 间隔异常）
+```
+
+### 34.4 传输比较
+
+| 传输 | 读取 | 写入 | 适用场景 |
+|------|------|------|----------|
+| HybridTransport | WebSocket | HTTP POST | CCR 桥接 |
+| SSETransport | SSE | HTTP POST | 远程会话 |
+| WebSocketTransport | WebSocket | WebSocket | 标准远程 |
+
+---
+
+## 三十五、StructuredIO — SDK 协议 — `cli/structuredIO.ts`
+
+### 35.1 协议消息类型
+
+```typescript
+type StdinMessage =
+  | { type: 'user_message', message: SDKUserMessage }
+  | { type: 'interrupt' }
+  | { type: 'ping' }
+
+type StdoutMessage =
+  | { type: 'assistant_message', message: AssistantMessage }
+  | { type: 'tool_result', tool_use_id, result }
+  | { type: 'stream_event', ... }
+  | { type: 'permission_request', ... }
+```
+
+### 35.2 核心机制
+
+| 机制 | 说明 |
+|------|------|
+| pendingRequests Map | 请求/响应跟踪 |
+| resolvedToolUseIds Set | 去重已处理工具调用 |
+| outbound Stream | 控制请求优先队列 |
+| prependedLines | 队首插入（抢先处理） |
+
+### 35.3 RemoteIO 扩展
+
+```typescript
+// RemoteIO 在 StructuredIO 基础上添加：
+- RemoteSessionManager 连接管理
+- 权限请求转发
+- 会话状态同步
+```
+
+---
+
+## 三十六、常量定义 — `constants/`
+
+### 36.1 API 限制 — `apiLimits.ts`
+
+```typescript
+// 图片
+API_IMAGE_MAX_BASE64_SIZE = 5 MB
+IMAGE_TARGET_RAW_SIZE = 3.75 MB
+IMAGE_MAX_WIDTH/HEIGHT = 2000px
+
+// PDF
+PDF_TARGET_RAW_SIZE = 20 MB
+API_PDF_MAX_PAGES = 100
+PDF_EXTRACT_SIZE_THRESHOLD = 3 MB
+
+// 媒体
+API_MAX_MEDIA_PER_REQUEST = 100
+
+// 工具结果
+DEFAULT_MAX_RESULT_SIZE_CHARS = 50,000
+MAX_TOOL_RESULT_TOKENS = 100,000
+MAX_TOOL_RESULTS_PER_MESSAGE_CHARS = 200,000
+```
+
+### 36.2 Beta 头部 — `betas.ts`
+
+```typescript
+CLAUDE_CODE_20250219_BETA_HEADER = 'claude-code-20250219'
+INTERLEAVED_THINKING_BETA_HEADER = 'interleaved-thinking-2025-05-14'
+CONTEXT_1M_BETA_HEADER = 'context-1m-2025-08-07'
+WEB_SEARCH_BETA_HEADER = 'web-search-2025-03-05'
+TASK_BUDGETS_BETA_HEADER = 'task-budgets-2026-03-13'
+PROMPT_CACHING_SCOPE_BETA_HEADER = 'prompt-caching-scope-2026-01-05'
+FAST_MODE_BETA_HEADER = 'fast-mode-2026-02-01'
+ADVISOR_BETA_HEADER = 'advisor-tool-2026-03-01'
+```
+
+### 36.3 系统常量 — `system.ts`
+
+```typescript
+// CLI 前缀
+DEFAULT_PREFIX = "You are Claude Code, Anthropic's official CLI..."
+AGENT_SDK_PREFIX = "You are a Claude agent, built on Anthropic's..."
+
+// 归因头部
+getAttributionHeader()
+  → cc_version: 版本 + 指纹
+  → cc_entrypoint: 入口点
+  → cch: Native 客户端证明（可选）
+  → cc_workload: 工作负载提示
+```
+
+---
+
+## 三十七、Doctor 诊断 — `screens/Doctor.tsx`
+
+### 37.1 诊断检查项
+
+```typescript
+type DiagnosticCheck = {
+  // 版本信息
+  stable/latest 版本标签
+  
+  // 环境验证
+  BASH_MAX_OUTPUT_LENGTH
+  TASK_MAX_OUTPUT_LENGTH
+  
+  // Agent 定义
+  activeAgents
+  userAgentsDir/projectAgentsDir
+  
+  // MCP 服务器
+  mcpTools
+  
+  // 插件错误
+  pluginsErrors
+  
+  // 锁文件状态
+  LockInfo[] (PID-based locking)
+  
+  // 验证错误
+  validationErrors
+}
+```
+
+### 37.2 诊断信息类型
+
+```typescript
+getDoctorDiagnostic()
+  → npmDistTags (stable/latest)
+  → lockInfo (stale locks cleanup)
+  → contextWarnings
+  → agentInfo
+```
+
+---
+
+## 三十八、Remote Session 远程会话 — `remote/`
+
+### 38.1 RemoteSessionManager
+
+```typescript
+class RemoteSessionManager {
+  websocket: SessionsWebSocket
+  pendingPermissionRequests: Map<string, SDKControlPermissionRequest>
+  
+  connect()
+  sendMessage(message: SDKMessage)
+  requestPermission(request: SDKControlPermissionRequest)
+  resolvePermission(requestId: string, response: PermissionUpdate)
+}
+```
+
+### 38.2 SessionsWebSocket
+
+```
+连接：wss://api.anthropic.com/v1/sessions/ws/{sessionId}/subscribe
+认证：{ type: 'auth', credential: { type: 'oauth', token: '...' } }
+
+重连策略：
+- 指数退避（最多 5 次）
+- 4001 错误有限重试（最多 3 次）
+- Ping 心跳（30s 间隔）
+```
+
+### 38.3 DirectConnect — `server/createDirectConnectSession.ts`
+
+```typescript
+createDirectConnectSession({
+  serverUrl,
+  authToken,
+  cwd,
+  dangerouslySkipPermissions
+})
+→ POST /sessions
+→ 返回 { session_id, ws_url, work_dir }
+```
+
+---
+
+## 三十九、UpstreamProxy 上游代理 — `upstreamproxy/`
+
+### 39.1 CCR 容器内代理
+
+```
+用途：在 CCR 会话容器中转发 HTTPS流量
+
+流程：
+1. 读取 session token (/run/ccr/session_token)
+2. 设置 prctl(PR_SET_DUMPABLE, 0) 阻止 ptrace
+3. 下载 MITM CA 证书
+4. 启动 CONNECT→WebSocket relay
+5. 暴露 HTTPS_PROXY/SSL_CERT_FILE
+```
+
+### 39.2 NO_PROXY 列表
+
+```
+localhost, 127.0.0.1, ::1
+169.254.0.0/16 (IMDS)
+10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+anthropic.com (直连，不走 MITM)
+github.com, *.github.com
+npm/pypi/crates 注册表
+```
+
+### 39.3 CONNECT-over-WebSocket Relay
+
+```
+协议：UpstreamProxyChunk protobuf
+  tag = 0x0a, varint length, data
+
+中继：localhost TCP → WebSocket → CCR egress gateway
+用途：git push, npm install 等需要 MITM 的流量
+```
+
+---
+
+## 四十、OutputStyles 输出样式 — `outputStyles/`
+
+### 40.1 加载流程
+
+```typescript
+getOutputStyleDirStyles(cwd)
+  → loadMarkdownFilesForSubdir('output-styles', cwd)
+  → 解析 frontmatter (name, description)
+  → 返回 OutputStyleConfig[]
+```
+
+### 40.2 样式配置
+
+```typescript
+interface OutputStyleConfig {
+  name: string
+  description: string
+  prompt: string      // markdown 内容
+  source: 'project' | 'user'
+  keepCodingInstructions?: boolean
+}
+```
+
+### 40.3 优先级
+
+```
+项目样式 (.claude/output-styles/*.md) > 用户样式 (~/.claude/output-styles/*.md)
+```
+
+---
+
+## 四十一、优雅退出 — `utils/gracefulShutdown.ts`
+
+### 41.1 退出信号处理
+
+```typescript
+SIGINT  → gracefulShutdown(0)
+SIGTERM → gracefulShutdown(143)  // 128 + 15
+SIGHUP  → gracefulShutdown(129)  // 128 + 1
+孤儿检测 → 30s 间隔检查 stdin/stdout 可用性
+```
+
+### 41.2 退出流程
+
+```
+1. cleanupTerminalModes()
+   → 禁用鼠标追踪
+   → 退出 alt screen
+   → 恢复光标
+   → 清除 iTerm2 进度
+
+2. printResumeHint()
+   → 显示 claude --resume 提示
+
+3. runCleanupFunctions()
+   → 最多 2s 超时
+
+4. executeSessionEndHooks()
+   → SessionEnd hooks
+   → 超时：sessionEndHookTimeoutMs
+
+5. analytics flush
+   → 最多 500ms
+
+6. forceExit()
+   → process.exit() 或 SIGKILL
+```
+
+### 41.3 Failsafe 定时器
+
+```
+超时 = max(5s, sessionEndTimeoutMs + 3.5s)
+→ 保证即使 cleanup 挂起也能退出
+```
+
+---
+
+## 四十二、命令系统 — `commands/`
+
+### 42.1 命令结构
+
+```
+commands/
+├── doctor/         # 诊断检查
+├── resume/         # 恢复会话
+├── mcp/           # MCP 服务器管理
+│   ├── addCommand.ts
+│   └── xaaIdpCommand.ts
+├── config/         # 配置管理
+├── agent/          # Agent 管理
+├── session/        # 会话管理
+└── ...（共 80+ 子命令）
+```
+
+### 42.2 命令类型
+
+```typescript
+type LocalJSXCommandCall = (
+  onDone: (result?: string) => void,
+  context: CommandContext,
+  args: string[]
+) => Promise<React.ReactNode>
+```
+
+### 42.3 MCP Add 命令
+
+```typescript
+claude mcp add <name> <commandOrUrl> [args]
+  --scope <scope>      // local/user/project
+  --transport <type>  // stdio/sse/http
+  --env <KEY=value>   // 环境变量
+  --header <header>   // WebSocket 头
+  --client-id          // OAuth 客户端 ID
+  --xaa               // 启用 XAA
+```
+
+---
+
 *最后更新: 2026-04-17*
