@@ -4,6 +4,8 @@
 
 ## 关于 Claude Code 源码分析
 
+**补充学习日期**: 2026-04-17（Keybindings + LSP + MagicDocs）
+
 **分析日期**: 2026-04-17
 **源码位置**: `E:\claude-code-main`
 **规模**: ~1,900 文件，~512,000+ 行 TypeScript
@@ -34,6 +36,37 @@ Claude Code 是一个**流式 AI Agent + 工具化 + 分层权限 + 智能上下
 ---
 
 ## 详细文档
+
+更多内容存储在：
+
+## 新增覆盖模块
+
+### Keybindings 系统
+- 14 个文件：resolver/parser/match/useKeybinding/defaultBindings
+- 支持 Chord 多键序列（ctrl+k ctrl+s）
+- 19 个 Context（Global/Chat/Settings/Confirmation 等）
+
+### MagicDocs 系统
+- `# MAGIC DOC: [title]` 头自动检测
+- Post-Sampling Hook 自动更新文档
+- 只允许 Edit 工具，限制文件路径
+
+### LSP 系统
+- 7 个文件：manager/config/LSPClient/LSPServerInstance/LSPServerManager/LSPDiagnosticRegistry/passiveFeedback
+- 插件驱动配置（getAllLspServers 从插件加载）
+- 诊断去重：LRU Cache 跨会话去重
+- ContentModified 自动重试（最多 3 次）
+
+### 新增 Services
+- extractMemories / toolUseSummary / PromptSuggestion
+- autoDream / settingsSync / remoteManagedSettings
+- teamMemorySync / oauth / tips
+
+### Assistant + CLI
+- HybridTransport / SSETransport / WebSocketTransport
+- DirectConnect 会话管理
+
+---
 
 更多内容存储在：
 

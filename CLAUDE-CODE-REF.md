@@ -49,8 +49,48 @@
 - `BackgroundTasksDialog.tsx` — 后台任务
 - `Spinner.tsx` — 旋转动画
 
+## Keybindings 快捷键系统
+- `keybindings/resolver.ts` — 按键解析 + Chord 状态
+- `keybindings/parser.ts` — 按键字符串解析
+- `keybindings/match.ts` — Ink Key 匹配
+- `keybindings/useKeybinding.ts` — React Hook
+- `keybindings/defaultBindings.ts` — 默认绑定表
+
+## MagicDocs 文档系统
+- `services/MagicDocs/magicDocs.ts` — 核心逻辑
+- `# MAGIC DOC: [title]` 头检测
+- Post-Sampling Hook 自动更新
+
+## LSP 语言服务器
+- `services/lsp/manager.ts` — 单例管理
+- `services/lsp/LSPClient.ts` — JSON-RPC 客户端
+- `services/lsp/LSPServerInstance.ts` — 服务器实例
+- `services/lsp/LSPServerManager.ts` — 多服务器路由
+- `services/lsp/LSPDiagnosticRegistry.ts` — 诊断去重
+- `services/lsp/passiveFeedback.ts` — publishDiagnostics 处理
+
+## 新增 Services 模块
+- `extractMemories/` — 记忆提取
+- `toolUseSummary/` — 工具使用摘要
+- `PromptSuggestion/` — 提示词建议
+- `autoDream/` — 自动 Dream
+- `settingsSync/` — 设置同步
+- `remoteManagedSettings/` — 远程托管设置
+- `teamMemorySync/` — 团队记忆同步
+- `oauth/` — OAuth 处理
+- `tips/` — 提示系统
+
+## Assistant + CLI
+- `assistant/sessionHistory.ts` — Session 历史
+- `assistant/transports/` — Hybrid/SSE/WS 传输
+- `cli/` — CLI 命令
+
+## Bootstrap + Server
+- `bootstrap/` — 首次运行引导
+- `server/` — DirectConnect 会话管理
+
 ## 特性开关
-`COORDINATOR_MODE` / `KAIROS` / `VOICE_MODE` / `PROACTIVE` / `BASH_CLASSIFIER` / `CONTEXT_COLLAPSE` / `REACTIVE_COMPACT` / `MCP_SKILLS`
+`COORDINATOR_MODE` / `KAIROS` / `VOICE_MODE` / `PROACTIVE` / `BASH_CLASSIFIER` / `CONTEXT_COLLAPSE` / `REACTIVE_COMPACT` / `MCP_SKILLS` / `QUICK_SEARCH` / `TERMINAL_PANEL` / `MESSAGE_ACTIONS`
 
 ## 设计模式
 管道模式 / 策略模式 / 观察者模式 / 中介者模式 / 状态机 / React Compiler 缓存

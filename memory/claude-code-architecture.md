@@ -449,4 +449,344 @@ function Component(t0) {
 
 ---
 
+## 十九、Keybindings 快捷键系统 — `keybindings/`
+
+### 19.1 文件清单
+
+```
+keybindings/
+├── defaultBindings.ts     — 默认按键绑定定义
+├── resolver.ts           — 按键解析 + Chord 状态管理
+├── parser.ts             — 按键字符串解析（ctrl+shift+k）
+├── match.ts              — Ink Key 与 ParsedKeystroke 匹配
+├── useKeybinding.ts       — React Hook（单/多按键处理）
+├── KeybindingContext.tsx  — Context Provider（Chord 拦截）
+├── KeybindingProviderSetup.tsx — Provider 配置
+├── loadUserBindings.ts   — 用户自定义绑定加载
+├── defaultBindings.ts    — 默认绑定表
+├── schema.ts             — 绑定 JSON Schema
+├── template.ts           — 绑定模板生成
+├── shortcutFormat.ts     — 快捷键格式化
+├── reservedShortcuts.ts  — 保留快捷键（不可重绑）
+├── validate.ts           — 绑定验证
+└── useShortcutDisplay.ts — 快捷键展示
+```
+
+### 19.2 按键解析流程
+
+```typescript
+// 1. 字符串解析: "ctrl+shift+k" → ParsedKeystroke
+export function parseKeystroke(input: string): ParsedKeystroke
+
+// 2. Chord 解析: "ctrl+k ctrl+s" → Chord
+export function parseChord(input: string): Chord
+
+// 3. Ink Key 匹配
+export function matchesKeystroke(input: string, key: Key, target: ParsedKeystroke): boolean
+
+// 4. Chord 状态解析（支持多键序列）
+export function resolveKeyWithChordState(
+  input, key, activeContexts, bindings, pending
+): ChordResolveResult
+
+// 5. 动作解析
+export function resolveKey(input, key, activeContexts, bindings): ResolveResult
+```
+
+### 19.3 Context 上下文
+
+| Context | 场景 |
+|---------|------|
+| `Global` | 全局快捷键 |
+| `Chat` | 对话输入框 |
+| `Autocomplete` | 自动补全 |
+| `Settings` | 设置面板 |
+| `Confirmation` | 确认对话框 |
+| `Tabs` | 标签页导航 |
+| `Transcript` | 转录视图 |
+| `HistorySearch` | 历史搜索 |
+| `Task` | 任务背景 |
+| `ThemePicker` | 主题选择 |
+| `Scroll` | 滚动 |
+| `Help` | 帮助 |
+| `Attachments` | 附件导航 |
+| `Footer` | 底部状态栏 |
+| `MessageSelector` | 消息选择器 |
+| `DiffDialog` | Diff 对话框 |
+| `ModelPicker` | 模型选择器 |
+| `Select` | 选择组件 |
+| `Plugin` | 插件对话框 |
+
+### 19.4 核心快捷键
+
+```typescript
+// Global
+'ctrl+c': 'app:interrupt'
+'ctrl+d': 'app:exit'
+'ctrl+l': 'app:redraw'
+'ctrl+t': 'app:toggleTodos'
+'ctrl+o': 'app:toggleTranscript'
+'ctrl+r': 'history:search'
+'ctrl+shift+f': 'app:globalSearch'  // feature: QUICK_SEARCH
+
+// Chat
+'escape': 'chat:cancel'
+'ctrl+x ctrl+k': 'chat:killAgents'
+'shift+tab': 'chat:cycleMode'
+'meta+p': 'chat:modelPicker'
+'enter': 'chat:submit'
+'up/down': 'history:previous/next'
+'ctrl+_': 'chat:undo'
+'space': 'voice:pushToTalk'  // feature: VOICE_MODE
+```
+
+---
+
+## 二十、魔法文档 MagicDocs — `services/MagicDocs/`
+
+### 20.1 核心概念
+
+Magic Docs 自动维护标记了特殊头的 Markdown 文件。当文件包含 `# MAGIC DOC: [title]` 头时，系统会在后台定期运行 subagent 更新文档。
+
+### 20.2 工作流程
+
+```typescript
+// 1. 检测 Magic Doc 头
+detectMagicDocHeader(content: string): { title, instructions? } | null
+
+// 2. 注册追踪
+registerMagicDoc(filePath: string): void
+
+// 3. Post-Sampling Hook 更新
+registerPostSamplingHook(updateMagicDocs)
+
+// 4. 使用 runAgent 执行更新（只允许 Edit 工具）
+runAgent({
+  agentDefinition: getMagicDocsAgent(),
+  canUseTool: (tool) => tool.name === 'Edit' && filePath === docPath ? allow : deny
+})
+```
+
+### 20.3 文件清单
+
+```
+MagicDocs/
+├── magicDocs.ts      — 核心逻辑
+└── prompts.ts       — 更新提示词模板
+```
+
+### 20.4 规则
+
+- Magic Doc 头必须保留：`# MAGIC DOC: {{docTitle}}`
+- 斜体行紧随标题后的指令必须保留
+- 只更新实质新内容；无实质更新则不调用工具
+- 文档哲学：简洁、高信号、概述 > 细节
+
+---
+
+## 二十一、LSP 语言服务器协议 — `services/lsp/`
+
+### 21.1 文件清单
+
+```
+lsp/
+├── manager.ts                — 单例管理 + 生命周期
+├── config.ts                 — 配置加载（从插件）
+├── LSPClient.ts             — JSON-RPC 客户端封装
+├── LSPServerInstance.ts     — 单个服务器实例
+├── LSPServerManager.ts      — 多服务器路由
+├── LSPDiagnosticRegistry.ts — 诊断注册 + 去重
+└── passiveFeedback.ts       — publishDiagnostics 处理
+```
+
+### 21.2 架构
+
+```
+Plugin LSP Config
+    ↓
+config.ts: getAllLspServers()
+    ↓
+LSPServerManager (单例)
+    ↓
+LSPServerInstance (每个服务器)
+    ↓
+LSPClient (vscode-jsonrpc)
+    ↓
+StdioProcess / StreamableHTTP / SSE / WebSocket
+```
+
+### 21.3 LSPServerInstance 状态机
+
+```
+stopped → starting → running
+running → stopping → stopped
+any → error (crash)
+error → starting (retry, 最多 maxRestarts=3)
+```
+
+### 21.4 文件同步
+
+```typescript
+// 文件打开
+manager.openFile(filePath, content)
+  → textDocument/didOpen
+
+// 文件变更
+manager.changeFile(filePath, content)
+  → textDocument/didChange
+
+// 文件保存
+manager.saveFile(filePath)
+  → textDocument/didSave
+
+// 文件关闭
+manager.closeFile(filePath)
+  → textDocument/didClose
+```
+
+### 21.5 诊断去重
+
+```typescript
+// MAX_DIAGNOSTICS_PER_FILE = 10
+// MAX_TOTAL_DIAGNOSTICS = 30
+// MAX_DELIVERED_FILES = 500 (LRU)
+
+// 跨会话去重：deliveredDiagnostics LRU Cache
+// 诊断唯一键：message + severity + range + source + code
+```
+
+### 21.6 重试机制
+
+```typescript
+// ContentModified (-32801) 自动重试
+MAX_RETRIES_FOR_TRANSIENT_ERRORS = 3
+RETRY_BASE_DELAY_MS = 500
+// 延迟序列: 500ms, 1000ms, 2000ms
+```
+
+---
+
+## 二十二、新增 Services 模块
+
+### 22.1 extractMemories — 记忆提取
+
+```typescript
+// 从对话中提取重要信息写入 MEMORY.md
+```
+
+### 22.2 toolUseSummary — 工具使用摘要
+
+```typescript
+// 工具使用统计和摘要生成
+toolUseSummaryGenerator.ts
+```
+
+### 22.3 PromptSuggestion — 提示词建议
+
+```typescript
+// promptSuggestion.ts — 提示词补全
+// speculation.ts — 推测性补全
+```
+
+### 22.4 autoDream — 自动 Dream
+
+```typescript
+// autoDream.ts — 自动记忆整合触发
+// consolidationLock.ts — 整合锁
+// consolidationPrompt.ts — 整合提示词
+```
+
+### 22.5 settingsSync — 设置同步
+
+```typescript
+// 用户设置跨设备同步
+```
+
+### 22.6 remoteManagedSettings — 远程托管设置
+
+```typescript
+// 远程管理的企业设置
+// securityCheck.tsx — 安全检查
+```
+
+### 22.7 teamMemorySync — 团队记忆同步
+
+```typescript
+// 团队共享记忆同步
+// secretScanner.ts — 秘密扫描
+// teamMemSecretGuard.ts — 团队记忆安全守卫
+```
+
+### 22.8 oauth — OAuth 处理
+
+```typescript
+// OAuth 授权流程
+```
+
+### 22.9 tips — 提示系统
+
+```typescript
+// 用户提示和技巧
+```
+
+---
+
+## 二十三、Assistant 系统 — `assistant/`
+
+### 23.1 文件清单
+
+```
+assistant/
+├── sessionHistory.ts  — Session 历史管理
+├── handlers/          — 消息处理器
+└── transports/        — 传输层（Hybrid/SSE/WS/Batch）
+```
+
+### 23.2 Remote Transports
+
+```typescript
+// HybridTransport — 混合传输
+// SSETransport — Server-Sent Events
+// WebSocketTransport — WebSocket
+// SerialBatchEventUploader — 批量事件上传
+// WorkerStateUploader — Worker 状态上传
+```
+
+---
+
+## 二十四、CLI 系统 — `cli/`
+
+### 24.1 文件清单
+
+```
+cli/
+├── agents.ts         — Agent CLI
+├── auth.ts          — 认证
+├── autoMode.ts      — 自动模式
+├── mcp.tsx         — MCP CLI
+├── plugins.ts       — 插件 CLI
+└── util.tsx        — 工具函数
+```
+
+---
+
+## 二十五、Bootstrap 系统 — `bootstrap/`
+
+```typescript
+// 首次运行引导
+// 环境检测
+```
+
+---
+
+## 二十六、Server DirectConnect — `server/`
+
+```typescript
+// createDirectConnectSession.ts — 创建直连会话
+// directConnectManager.ts — 会话管理
+// types.ts — 类型定义
+```
+
+---
+
 *最后更新: 2026-04-17*
