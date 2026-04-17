@@ -4,7 +4,7 @@
 
 ## 关于 Claude Code 源码分析
 
-**补充学习日期**: 2026-04-17（Keybindings + LSP + MagicDocs）
+**补充学习日期**: 2026-04-17（第二轮：ExtractMemories + PromptSuggestion + autoDream + Entrypoints）
 
 **分析日期**: 2026-04-17
 **源码位置**: `E:\claude-code-main`
@@ -35,11 +35,37 @@ Claude Code 是一个**流式 AI Agent + 工具化 + 分层权限 + 智能上下
 
 ---
 
-## 详细文档
+## 新增覆盖模块（第二轮）
 
-更多内容存储在：
+### ExtractMemories 记忆提取
+- `extractMemories.ts` — Forked 子 Agent 写入 auto-memory
+- 工具限制：Read/Grep/Glob 无限制，Bash 只读，Edit/Write 只允许 auto-memory
+- 节流：tengu_bramble_lintel 控制执行频率
+- 互斥保护：主 Agent 已写入则跳过
 
-## 新增覆盖模块
+### PromptSuggestion 提示词建议
+- `promptSuggestion.ts` — Haiku 生成用户意图预测
+- 过滤器：done/meta/evaluative/claude_voice
+- 关键：不 override API 参数，否则 cache hit 率从 92.7% 暴跌至 61%
+
+### toolUseSummary 工具摘要
+- `toolUseSummaryGenerator.ts` — Haiku 生成工具完成摘要
+- 规则：动词过去式 + distinctive 名词，~30 字符
+
+### autoDream 自动记忆整合
+- `autoDream.ts` — 后台记忆整合
+- Gate：时间（24h）+ 会话数（5）+ 锁
+- consolidationLock.ts — 分布式锁机制
+- DreamTask 集成进度追踪
+
+### Entrypoints 入口点
+- `entrypoints/cli.tsx` — 特殊标志快速路径
+- `entrypoints/init.ts` — 完整初始化流水线（17 个步骤）
+- Feature 门控：BRIDGE_MODE/DAEMON/BG_SESSIONS/TEMPLATES
+
+---
+
+## 新增覆盖模块（第一轮）
 
 ### Keybindings 系统
 - 14 个文件：resolver/parser/match/useKeybinding/defaultBindings
@@ -68,9 +94,11 @@ Claude Code 是一个**流式 AI Agent + 工具化 + 分层权限 + 智能上下
 
 ---
 
+## 详细文档
+
 更多内容存储在：
 
-- `memory/claude-code-architecture.md` — 完整架构知识库
+- `memory/claude-code-architecture.md` — 完整架构知识库（包含 33 个章节）
 - `memory/2026-04-17-claude-code-analysis.md` — 深度分析笔记
 
 ---

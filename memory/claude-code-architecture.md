@@ -789,4 +789,241 @@ cli/
 
 ---
 
+---
+
+## 二十七、ExtractMemories 记忆提取 — `services/extractMemories/`
+
+### 27.1 工作流程
+
+```
+对话结束（无 tool calls）
+  → executeExtractMemories()
+  → runForkedAgent() — Forked 子 Agent
+  → 共享父 prompt cache
+  → 写文件到 auto-memory 目录
+```
+
+### 27.2 工具限制（canUseTool）
+
+| 允许 | 限制 |
+|------|------|
+| Read/Grep/Glob | 无限制 |
+| Bash | 只读命令（isReadOnly） |
+| Edit/Write | 只允许 auto-memory 路径 |
+
+### 27.3 节流机制
+
+```typescript
+// tengu_bramble_lintel 控制每 N 轮执行一次
+turnsSinceLastExtraction < getFeatureValue('tengu_bramble_lintel', 1)
+```
+
+### 27.4 互斥保护
+
+- 主 Agent 已写入 memory → 跳过 forked extraction
+- 防止重复写入
+
+---
+
+## 二十八、PromptSuggestion 提示词建议 — `services/PromptSuggestion/`
+
+### 28.1 提示词生成
+
+```typescript
+// 使用 Haiku 生成用户可能输入的提示词
+const SUGGESTION_PROMPT = `[SUGGESTION MODE: Suggest what the user might naturally type next...]`
+
+// 规则：
+// - 预测用户意图，不是建议应该做什么
+// - 2-12 个词，匹配用户风格
+// - 不要建议：评价性、问题、Claude 风格、新想法
+```
+
+### 28.2 过滤器
+
+| 过滤 | 条件 |
+|------|------|
+| `done` | 精确匹配 "done" |
+| `meta_text` | "nothing found", "silence" |
+| `evaluative` | "thanks", "looks good" |
+| `claude_voice` | "Let me...", "I'll..." |
+| `too_few_words` | 单词数 < 2（非斜杠命令） |
+| `too_many_words` | 单词数 > 12 |
+
+### 28.3 缓存优化
+
+```typescript
+// 关键：不 override API 参数（tools/thinking/effort/maxOutputTokens）
+// 否则 cache hit 率从 92.7% 暴跌至 61%
+// 唯一安全 override：abortController, skipTranscript, skipCacheWrite
+```
+
+---
+
+## 二十九、toolUseSummary 工具使用摘要 — `services/toolUseSummary/`
+
+### 29.1 功能
+
+使用 Haiku 为完成的工具批次生成人类可读的摘要标签。
+
+### 29.2 示例
+
+```
+- Searched in auth/
+- Fixed NPE in UserService
+- Created signup endpoint
+- Read config.json
+- Ran failing tests
+```
+
+### 29.3 规则
+
+- 动词过去式 + 最 distinctive 名词
+- 删除冠词、连接词
+- 截断约 30 字符
+
+---
+
+## 三十、autoDream 自动记忆整合 — `services/autoDream/`
+
+### 30.1 触发条件（Gate 顺序）
+
+| 顺序 | Gate | 阈值 |
+|------|------|------|
+| 1 | 时间 | 距离上次 >= minHours（默认 24h） |
+| 2 | 会话数 | mtime > lastConsolidatedAt 的会话 >= minSessions（默认 5） |
+| 3 | 锁 | 无其他进程正在整合 |
+
+### 30.2 锁定机制
+
+```typescript
+// consolidationLock.ts
+tryAcquireConsolidationLock()
+  → 成功 → 继续
+  → 失败（已有锁） → 跳过
+
+// rollbackConsolidationLock(priorMtime)
+  → 失败后回滚 mtime
+```
+
+### 30.3 与 DreamTask 集成
+
+```typescript
+const taskId = registerDreamTask(setAppState, {
+  sessionsReviewing: sessionIds.length,
+  priorMtime,
+  abortController,
+})
+
+// 进度追踪
+addDreamTurn(taskId, { text, toolUseCount }, touchedPaths, setAppState)
+
+// 完成/失败
+completeDreamTask(taskId, setAppState)
+failDreamTask(taskId, setAppState)
+```
+
+---
+
+## 三十一、Bootstrap 引导系统 — `bootstrap/`
+
+### 31.1 CLI 入口 — `entrypoints/cli.tsx`
+
+```
+cli.tsx
+  → --version: 零加载，输出版本
+  → --dump-system-prompt: 输出系统提示词
+  → --claude-in-chrome-mcp: Chrome MCP 服务器
+  → --chrome-native-host: Chrome 原生主机
+  → --computer-use-mcp: 计算机使用 MCP
+  → --daemon-worker: Daemon Worker
+  → remote-control/rc/remote/sync/bridge: 桥接模式
+  → daemon: 长运行 Daemon
+  → ps/logs/attach/kill: 会话管理
+  → templates: 模板作业
+  → environment-runner: BYOC Runner
+  → self-hosted-runner: 自托管 Runner
+  → --worktree --tmux: Tmux Worktree
+  → 默认: 加载完整 CLI
+```
+
+### 31.2 初始化 — `entrypoints/init.ts`
+
+```typescript
+init()
+  → enableConfigs()
+  → applySafeConfigEnvironmentVariables()
+  → setupGracefulShutdown()
+  → initialize1PEventLogging()
+  → populateOAuthAccountInfoIfNeeded()
+  → initJetBrainsDetection()
+  → detectCurrentRepository()
+  → initializeRemoteManagedSettingsLoadingPromise()
+  → configureGlobalMTLS()
+  → configureGlobalAgents()
+  → preconnectAnthropicApi()
+  → initUpstreamProxy() (CCR only)
+  → ensureScratchpadDir()
+```
+
+### 31.3 状态管理 — `bootstrap/state.ts`
+
+```typescript
+// 全局状态
+getIsRemoteMode()      // 远程模式
+getIsNonInteractiveSession()  // 非交互会话
+getKairosActive()      // KAIROS 模式
+getOriginalCwd()      // 原始工作目录
+getSessionId()        // 会话 ID
+```
+
+---
+
+## 三十二、Entrypoints 入口点 — `entrypoints/`
+
+### 32.1 文件清单
+
+| 文件 | 职责 |
+|------|------|
+| `cli.tsx` | CLI 入口 + 特殊标志处理 |
+| `init.ts` | 初始化主逻辑 |
+| `mcp.ts` | MCP 服务器入口 |
+| `sandboxTypes.ts` | 沙箱类型定义 |
+| `agentSdkTypes.ts` | Agent SDK 类型 |
+
+### 32.2 Feature 门控
+
+```typescript
+feature('BRIDGE_MODE')        // 桥接模式
+feature('DAEMON')             // Daemon 模式
+feature('BG_SESSIONS')        // 后台会话
+feature('TEMPLATES')          // 模板系统
+feature('BYOC_ENVIRONMENT_RUNNER')  // BYOC Runner
+feature('SELF_HOSTED_RUNNER') // 自托管 Runner
+feature('CHICAGO_MCP')        // Chicago MCP
+```
+
+---
+
+## 三十三、Agent SDK 类型 — `assistant/agentSdkTypes.ts`
+
+```typescript
+// SDK 类型定义
+interface AgentConfig {
+  model?: string
+  systemPrompt?: string
+  tools?: Tool[]
+  maxTokens?: number
+  temperature?: number
+}
+
+interface AgentSession {
+  id: string
+  input(messages: Message[]): Promise<Message>
+  stop(): void
+}
+```
+
+---
+
 *最后更新: 2026-04-17*

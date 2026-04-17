@@ -89,6 +89,32 @@
 - `bootstrap/` — 首次运行引导
 - `server/` — DirectConnect 会话管理
 
+## ExtractMemories 记忆提取
+- `services/extractMemories/extractMemories.ts`
+- runForkedAgent() — Forked 子 Agent
+- canUseTool 限制：Read/Grep/Glob 无限制，Bash 只读，Edit/Write 只允许 auto-memory
+
+## PromptSuggestion 提示词建议
+- `services/PromptSuggestion/promptSuggestion.ts`
+- Haiku 生成用户意图预测
+- 过滤器：done/meta_text/evaluative/claude_voice
+
+## toolUseSummary 工具摘要
+- `services/toolUseSummary/toolUseSummaryGenerator.ts`
+- Haiku 生成工具完成摘要
+- 规则：动词过去式 + distinctive 名词，~30 字符
+
+## autoDream 自动记忆整合
+- `services/autoDream/autoDream.ts`
+- Gate：时间 + 会话数 + 锁
+- consolidationLock.ts — 分布式锁
+- DreamTask 集成进度追踪
+
+## Entrypoints 入口点
+- `entrypoints/cli.tsx` — CLI 入口 + 特殊标志
+- `entrypoints/init.ts` — 初始化主逻辑
+- Feature 门控：BRIDGE_MODE/DAEMON/BG_SESSIONS/TEMPLATES
+
 ## 特性开关
 `COORDINATOR_MODE` / `KAIROS` / `VOICE_MODE` / `PROACTIVE` / `BASH_CLASSIFIER` / `CONTEXT_COLLAPSE` / `REACTIVE_COMPACT` / `MCP_SKILLS` / `QUICK_SEARCH` / `TERMINAL_PANEL` / `MESSAGE_ACTIONS`
 
