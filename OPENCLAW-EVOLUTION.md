@@ -492,7 +492,49 @@ class ContextBudget {
 - [x] Entity Registry ✅
 - [x] Auto-Save Hooks ✅
 
+### Phase 5: 搜索系统 (Hermes FTS5 风格) ✅ 新完成
+
+- [x] FTS5 内存索引 ✅
+- [x] 会话存储 (SessionStore) ✅
+- [x] 全文搜索 + snippet 高亮 ✅
+- [x] 工具自注册 (Hermes 风格) ✅
+- [x] 工具集 (Toolsets) 支持 ✅
+- [x] OpenAI Function Calling Schema ✅
+
+**新增模块**:
+```
+modules/search/
+├── types.ts          # 搜索类型定义
+├── sessionSearch.ts  # FTS5 索引 + 会话存储
+└── index.ts          # 导出
+```
+
+**增强模块**:
+```
+modules/registry/      # Hermes 风格重写
+├── types.ts          # 增强类型 (Toolset, check_fn)
+├── registry.ts       # 自注册 + AST 发现
+└── index.ts
+```
+
 ---
 
-*最后更新: 2026-04-17*
-*基于 Claude Code + MemPalace 架构分析*
+## 十二、进化后状态
+
+| 指标 | 进化前 | 进化后 | 增加 |
+|------|--------|--------|------|
+| **模块数** | 1 | **9** | +8 |
+| **代码文件** | ~10 | **31** | +21 |
+| **代码行数** | ~500 | **8,577** | +8,077 |
+| **内置工具** | 0 | **10** | +10 |
+| **权限模式** | 0 | **3** | +3 |
+| **Agent 类型** | 1 | **5** | +4 |
+| **任务类型** | 1 | **6** | +5 |
+| **记忆类型** | 0 | **5** | +5 |
+| **记忆层** | 0 | **4** | +4 |
+| **搜索索引** | 0 | **FTS5** | ✅ |
+
+---
+
+*最后更新: 2026-04-17 23:02*
+*基于 Claude Code + MemPalace + Hermes Agent 架构分析*

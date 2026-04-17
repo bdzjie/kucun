@@ -1,13 +1,7 @@
 /**
- * Registry Module - Index
+ * Registry Module - Public API
+ * 工具注册表 - 公开接口
  */
 
 export * from './types'
 export * from './registry'
-
-// Quick usage
-import { ToolRegistry, globalToolRegistry, registerTool, getTool, executeTool, listTools } from './registry'
-
-export const tools = globalToolRegistry
-
-export default ToolRegistry

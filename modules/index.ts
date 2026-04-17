@@ -11,6 +11,21 @@
  * 6. Transport - 传输层
  */
 
+// Search Module (Hermes FTS5-style)
+export {
+  SessionStore,
+  globalSessionStore,
+  searchSessions,
+  getSession,
+  listSessions,
+  type SearchResult,
+  type SessionInfo,
+  type SessionSearchOptions,
+  type SearchStats,
+  type Fts5Query,
+  type SearchQuery,
+} from './search'
+
 // Permission Module
 export {
   PermissionManager,
