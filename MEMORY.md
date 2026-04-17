@@ -263,4 +263,48 @@ Claude Code 的设计亮点：
 
 ---
 
-*最后更新: 2026-04-17*
+## 关于 MemPalace 源码分析
+
+**分析日期**: 2026-04-18
+**源码位置**: `E:\mempalace-main`
+**规模**: ~25 个核心模块，~15,000 行 Python
+**Benchmark**: 96.6% LongMemEval R@5（raw mode，零 API 调用）
+
+### 核心创新
+
+- **记忆宫殿结构**: Wing → Room → Closet → Drawer
+- **原始逐字存储**: ChromaDB，96.6% 来自 raw mode
+- **Temporal Knowledge Graph**: SQLite 时序三元组，支持时间旅行查询
+- **零 LLM 提取**: 5类记忆（decision/preference/milestone/problem/emotional）纯模式匹配
+- **WAL 审计**: 每次写入先落日志，支持回滚
+
+### 关键模块
+
+| 模块 | 功能 |
+|------|------|
+| `miner.py` | 项目文件挖掘（gitignore + 分块 + 路由） |
+| `convo_miner.py` | 对话挖掘（exchange-pair 分块） |
+| `general_extractor.py` | 5类记忆提取（无 LLM） |
+| `entity_detector.py` | 双阶段实体检测（候选提取 → 信号打分） |
+| `entity_registry.py` | 持久化实体注册表（onboarding/learned/wiki） |
+| `knowledge_graph.py` | 时序 KG（SQLite） |
+| `palace_graph.py` | 图遍历（tunnel 发现） |
+| `layers.py` | 4层记忆栈（L0~L3） |
+| `mcp_server.py` | 19 个 MCP 工具 + WAL |
+| `dialect.py` | AAAK 压缩方言 |
+
+### 详细文档
+
+- `memory/mempalace-analysis.md` — 完整架构分析报告
+
+### 可借鉴思想
+
+1. **WAL 审计日志** — 外部写入先落日志，支持审计和回滚
+2. **Temporal KG** — 事实带时间戳，支持"2025年的架构决策"时间旅行查询
+3. **实体注册表 + Wikipedia 研究** — 未知实体自动查询并缓存
+4. **通用记忆分类器** — 纯模式匹配，无 LLM 也可分类
+5. **增量挖掘** — 基于 mtime 的增量重挖
+
+---
+
+*最后更新: 2026-04-18*
