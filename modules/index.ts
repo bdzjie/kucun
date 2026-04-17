@@ -26,6 +26,45 @@ export {
   type SearchQuery,
 } from './search'
 
+// Provider Module (Hermes Multi-API Mode)
+export {
+  ProviderResolver,
+  ApiClient,
+  FallbackChain,
+  globalProviderResolver,
+  globalApiClient,
+  globalFallbackChain,
+  resolveRuntimeProvider,
+  chatComplete,
+  chatCompleteWithInterrupt,
+  type ApiMode,
+  type Provider,
+  type RuntimeProvider,
+  type Message,
+  type ToolDefinition,
+  type InterruptibleCallConfig,
+  type CallResult,
+  type FallbackConfig,
+  type FallbackResult,
+} from './provider'
+
+// Agent Module (Hermes AIAgent Core Loop)
+export {
+  AIAgent,
+  createAgent,
+  chat,
+  type AgentConfig,
+  type AgentStatus,
+  type AgentCallbacks,
+  type AgentResult,
+  type Turn,
+  type ToolResult,
+  type Session,
+  type SessionLineage,
+  type PreflightCheck,
+  type CompressionDecision,
+} from './agent'
+
 // Permission Module
 export {
   PermissionManager,
