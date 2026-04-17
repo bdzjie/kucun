@@ -351,7 +351,66 @@ interface ReconnectStrategy {
 
 ---
 
-## 九、参考实现
+## 九、MemPalace 记忆系统整合 - 完成
+
+### 来源
+MemPalace (E:\mempalace-main) - 96.6% LongMemEval R@5 开源记忆系统
+
+### 已实现模块
+
+```
+modules/memory/
+├── types.ts          # 类型定义 (Palace + KG + 4-Layer)
+├── palace.ts         # 记忆宫殿 (Wings/Rooms/Drawers)
+├── knowledgeGraph.ts # 时态知识图谱
+├── memoryStack.ts    # 4层记忆栈
+├── extractor.ts      # 通用记忆提取器 (5种类型)
+├── hooks.ts          # 自动保存钩子
+├── memoryManager.ts  # 统一管理器
+└── index.ts          # 导出
+```
+
+### 核心功能
+
+1. **Palace 结构** - Wing (人/项目) → Room (主题) → Drawer (原文)
+2. **Temporal KG** - 实体关系 + valid_from/valid_to 时间窗
+3. **4-Layer Stack** - L0 Identity (~50) + L1 Essential (~500) + L2 On-Demand + L3 Deep Search
+4. **General Extractor** - 自动分类: decision/preference/milestone/problem/emotional
+5. **Auto-Save Hooks** - 每15条消息保存 + 压缩前紧急保存
+6. **Entity Registry** - 实体消解 (歧义词/上下文判断)
+
+### 使用示例
+
+```typescript
+import { MemoryManager, extractMemories } from './modules/memory'
+
+const memory = new MemoryManager('session-123')
+
+// 保存记忆
+await memory.addDrawer('project-x', 'architecture', 'Using microservices')
+
+// 提取记忆类型
+const memories = await memory.extractMemories('We decided to switch to...')
+// → [{ type: 'decision', content: '...', confidence: 0.8 }]
+
+// 知识图谱
+await memory.addTriple('Team', 'decided', 'Microservices')
+const facts = await memory.queryEntity('Team')
+
+// 唤醒
+const { layer0, layer1 } = await memory.wakeUp()
+
+// 自动保存钩子
+memory.onSessionStart()
+const decision = await memory.triggerHook('pre_compact')
+if (decision.decision === 'block') {
+  await memory.preCompactSave(conversationContent)
+}
+```
+
+---
+
+## 十、参考实现
 
 ```typescript
 // 示例：权限检查
@@ -402,5 +461,38 @@ class ContextBudget {
 
 ---
 
+## 十一、实施路线图 (完整版)
+
+### Phase 1: 基础增强 ✅ 已完成
+
+- [x] 权限上下文接口 ✅
+- [x] 基本风险评估 ✅
+- [x] 工具注册表基础版 ✅
+
+### Phase 2: 中级进化 ✅ 已完成
+
+- [x] 完整权限系统 ✅
+- [x] Token 预算监控 ✅
+- [x] 基础压缩策略 ✅
+- [x] 任务协调器 ✅
+
+### Phase 3: 高级特性 ✅ 已完成
+
+- [x] 多 Agent 支持 ✅
+- [x] 完整分析系统 ✅
+- [x] 特性开关系统 ✅
+- [x] 增强传输层 ✅
+
+### Phase 4: 记忆系统 ✅ 已完成
+
+- [x] Palace 记忆宫殿 ✅
+- [x] Temporal KG ✅
+- [x] 4-Layer Stack ✅
+- [x] General Extractor ✅
+- [x] Entity Registry ✅
+- [x] Auto-Save Hooks ✅
+
+---
+
 *最后更新: 2026-04-17*
-*基于 Claude Code 架构分析*
+*基于 Claude Code + MemPalace 架构分析*
