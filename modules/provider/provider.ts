@@ -1,12 +1,6 @@
 /**
- * Provider Module - Multi-API Mode Abstraction
- * 提供者模块 - Hermes 三 API 模式统一实现
- * 
- * 核心设计:
- * 1. 三种 API 模式统一抽象
- * 2. Provider 自动检测与回退链
- * 3. 可中断的 API 调用
- * 4. 凭证管理与 OAuth 支持
+ * Provider Module - Enhanced with Robust Error Handling
+ * 提供者模块 - 增强错误处理与重试机制
  */
 
 import type {
@@ -15,7 +9,6 @@ import type {
   RuntimeProvider,
   Message,
   AssistantMessage,
-  ToolMessage,
   ChatCompletionsRequest,
   ChatCompletionsResponse,
   AnthropicMessagesRequest,
@@ -27,9 +20,29 @@ import type {
   FallbackConfig,
   FallbackResult,
   ToolDefinition,
+  ApiError,
+  ApiErrorCode,
+  RateLimitInfo,
+  ProviderStats,
+  RetryStrategy,
+  DEFAULT_RETRY_STRATEGY,
 } from './types'
 
+import { ApiErrorCode } from './types'
+
 import type { ToolCall } from '../registry/types'
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const DEFAULT_RETRY_STRATEGY_CONFIG: RetryStrategy = {
+  maxAttempts: 3,
+  baseDelay: 1000,
+  maxDelay: 30000,
+  exponentialBase: 2,
+  jitter: true,
+}
 
 // ============================================================================
 // Provider Registry
@@ -93,79 +106,104 @@ const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
 }
 
 // ============================================================================
+// Error Factory
+// ============================================================================
+
+function createApiError(
+  code: ApiErrorCode,
+  message: string,
+  options: {
+    status?: number
+    retryable?: boolean
+    retryAfter?: number
+    provider?: string
+    model?: string
+    cause?: Error
+  } = {}
+): ApiError {
+  const error = new Error(message) as ApiError
+  error.code = code
+  error.status = options.status
+  error.retryable = options.retryable ?? isRetryableCode(code)
+  error.retryAfter = options.retryAfter
+  error.provider = options.provider
+  error.model = options.model
+  error.cause = options.cause
+  return error
+}
+
+function isRetryableCode(code: ApiErrorCode): boolean {
+  return [
+    ApiErrorCode.RATE_LIMITED,
+    ApiErrorCode.SERVER_ERROR,
+    ApiErrorCode.SERVICE_UNAVAILABLE,
+    ApiErrorCode.MODEL_OVERLOADED,
+    ApiErrorCode.TIMEOUT,
+    ApiErrorCode.CONNECTION_FAILED,
+  ].includes(code)
+}
+
+function parseErrorFromResponse(status: number, data: unknown, provider?: string): ApiErrorCode {
+  const dataStr = typeof data === 'string' ? data : JSON.stringify(data)
+  
+  if (status === 401) return ApiErrorCode.AUTH_FAILED
+  if (status === 403) return ApiErrorCode.AUTH_EXPIRED
+  if (status === 429) return ApiErrorCode.RATE_LIMITED
+  if (status === 400 && dataStr.includes('maximum context')) return ApiErrorCode.CONTEXT_OVERFLOW
+  if (status === 400 && dataStr.includes('model')) return ApiErrorCode.INVALID_MODEL
+  if (status === 400) return ApiErrorCode.INVALID_REQUEST
+  if (status >= 500) return ApiErrorCode.SERVER_ERROR
+  
+  return ApiErrorCode.UNKNOWN_ERROR
+}
+
+// ============================================================================
 // Provider Resolver
 // ============================================================================
 
-/**
- * 解析运行时 Provider
- * 
- * 模式检测顺序:
- * 1. explicit mode (最高优先级)
- * 2. Provider 特定检测 (e.g., anthropic → anthropic_messages)
- * 3. Base URL 启发式 (e.g., api.anthropic.com → anthropic_messages)
- * 4. 默认: chat_completions
- */
 export class ProviderResolver {
   private configs: Map<string, ProviderConfig>
   private credentials: Map<string, string>
+  private stats: Map<string, ProviderStats>
 
   constructor() {
     this.configs = new Map(Object.entries(PROVIDER_CONFIGS))
     this.credentials = new Map()
+    this.stats = new Map()
   }
 
-  /**
-   * 注册自定义 Provider
-   */
   registerConfig(config: ProviderConfig): void {
     this.configs.set(config.name, config)
   }
 
-  /**
-   * 设置凭证
-   */
   setCredential(provider: string, apiKey: string): void {
     this.credentials.set(provider, apiKey)
+    this.ensureStats(provider)
   }
 
-  /**
-   * 从环境变量加载凭证
-   */
   loadCredentialsFromEnv(): void {
     for (const [name, config] of this.configs) {
       if (config.apiKeyEnv) {
         const apiKey = process.env[config.apiKeyEnv]
         if (apiKey) {
-          this.credentials.set(name, apiKey)
+          this.setCredential(name, apiKey)
         }
       }
     }
   }
 
-  /**
-   * 解析运行时 Provider
-   */
   resolve(options: ResolveProviderOptions = {}): RuntimeProvider | null {
     const { provider, model, explicitMode } = options
 
-    if (!provider) {
-      return null
-    }
+    if (!provider) return null
 
     const config = this.configs.get(provider)
-    if (!config) {
-      return null
-    }
+    if (!config) return null
 
     const apiKey = this.credentials.get(provider)
-    if (!apiKey) {
-      return null
-    }
+    if (!apiKey) return null
 
-    // 确定 API 模式
     let mode = explicitMode || config.mode
-
-    // Base URL 启发式检测
     if (!explicitMode && !mode) {
       mode = this.detectModeFromBaseUrl(config.baseUrl)
     }
@@ -178,36 +216,45 @@ export class ProviderResolver {
     }
   }
 
-  /**
-   * 从 Base URL 检测 API 模式
-   */
-  private detectModeFromBaseUrl(baseUrl: string): ApiMode {
-    if (baseUrl.includes('anthropic.com')) {
-      return 'anthropic_messages'
-    }
-    if (baseUrl.includes('openrouter.ai')) {
-      return 'chat_completions'
-    }
-    return 'chat_completions'
-  }
-
-  /**
-   * 获取可用 Provider 列表
-   */
   listAvailableProviders(): string[] {
     return Array.from(this.configs.keys()).filter(p => this.credentials.has(p))
+  }
+
+  getStats(provider: string): ProviderStats | undefined {
+    return this.stats.get(provider)
+  }
+
+  updateStats(provider: string, update: Partial<ProviderStats>): void {
+    this.ensureStats(provider)
+    const stats = this.stats.get(provider)!
+    Object.assign(stats, update)
+  }
+
+  private ensureStats(provider: string): void {
+    if (!this.stats.has(provider)) {
+      this.stats.set(provider, {
+        provider,
+        totalRequests: 0,
+        successfulRequests: 0,
+        failedRequests: 0,
+        rateLimitedRequests: 0,
+        avgLatency: 0,
+        lastRequestAt: null,
+        lastErrorAt: null,
+      })
+    }
+  }
+
+  private detectModeFromBaseUrl(baseUrl: string): ApiMode {
+    if (baseUrl.includes('anthropic.com')) return 'anthropic_messages'
+    return 'chat_completions'
   }
 }
 
 // ============================================================================
-// API Client (Three Modes Unified)
+// API Client with Enhanced Error Handling
 // ============================================================================
 
-/**
- * Hermes-style API Client
- * 
- * 支持三种 API 模式，统一到相同内部消息格式
- */
 export class ApiClient {
   private resolver: ProviderResolver
 
@@ -215,11 +262,6 @@ export class ApiClient {
     this.resolver = resolver
   }
 
-  /**
-   * 统一聊天完成接口
-   * 
-   * 内部自动选择正确的 API 模式
-   */
   async chat(
     runtime: RuntimeProvider,
     request: {
@@ -228,26 +270,118 @@ export class ApiClient {
       tools?: ToolDefinition[]
       max_tokens?: number
       temperature?: number
-      stream?: boolean
     }
   ): Promise<{
     message: AssistantMessage
     usage: { input_tokens: number; output_tokens: number; total_tokens: number }
   }> {
-    switch (runtime.mode) {
-      case 'anthropic_messages':
-        return this.chatAnthropic(runtime, request)
-      case 'codex_responses':
-        return this.chatCodex(runtime, request)
-      case 'chat_completions':
-      default:
-        return this.chatOpenAI(runtime, request)
+    const startTime = Date.now()
+
+    try {
+      let result: { message: AssistantMessage; usage: { input_tokens: number; output_tokens: number; total_tokens: number } }
+
+      switch (runtime.mode) {
+        case 'anthropic_messages':
+          result = await this.chatAnthropic(runtime, request)
+          break
+        case 'codex_responses':
+          result = await this.chatCodex(runtime, request)
+          break
+        default:
+          result = await this.chatOpenAI(runtime, request)
+      }
+
+      // Update stats
+      this.resolver.updateStats(runtime.provider.name, {
+        totalRequests: (this.resolver.getStats(runtime.provider.name)?.totalRequests || 0) + 1,
+        successfulRequests: (this.resolver.getStats(runtime.provider.name)?.successfulRequests || 0) + 1,
+        lastRequestAt: Date.now(),
+      })
+
+      return result
+
+    } catch (error: any) {
+      // Update error stats
+      this.resolver.updateStats(runtime.provider.name, {
+        failedRequests: (this.resolver.getStats(runtime.provider.name)?.failedRequests || 0) + 1,
+        lastErrorAt: Date.now(),
+        lastError: error as ApiError,
+      })
+      throw error
     }
   }
 
-  /**
-   * Anthropic Messages API
-   */
+  async chatWithInterrupt(
+    runtime: RuntimeProvider,
+    request: {
+      model: string
+      messages: Message[]
+      tools?: ToolDefinition[]
+      max_tokens?: number
+      temperature?: number
+    },
+    config: InterruptibleCallConfig = {}
+  ): Promise<CallResult> {
+    const startTime = Date.now()
+    const timeout = config.timeout || 120000
+
+    let abortController: AbortController | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    if (typeof AbortController !== 'undefined') {
+      abortController = new AbortController()
+    }
+
+    // Set timeout
+    if (timeout > 0) {
+      timeoutId = setTimeout(() => {
+        abortController?.abort()
+        config.onInterrupt?.()
+      }, timeout)
+    }
+
+    // External signal
+    if (config.signal) {
+      config.signal.addEventListener('abort', () => {
+        abortController?.abort()
+        config.onInterrupt?.()
+      })
+    }
+
+    try {
+      const result = await this.chat(runtime, request)
+
+      if (timeoutId) clearTimeout(timeoutId)
+
+      return {
+        success: true,
+        response: result,
+        duration: Date.now() - startTime,
+      }
+
+    } catch (error: any) {
+      if (timeoutId) clearTimeout(timeoutId)
+
+      if (abortController?.signal.aborted || error?.name === 'AbortError') {
+        return {
+          success: false,
+          interrupted: true,
+          error: createApiError(ApiErrorCode.INTERRUPTED, 'Request interrupted'),
+          duration: Date.now() - startTime,
+        }
+      }
+
+      const apiError = this.normalizeError(error, runtime.provider.name)
+      config.onError?.(apiError)
+
+      return {
+        success: false,
+        error: apiError,
+        duration: Date.now() - startTime,
+      }
+    }
+  }
+
   private async chatAnthropic(
     runtime: RuntimeProvider,
     request: {
@@ -261,7 +395,6 @@ export class ApiClient {
     message: AssistantMessage
     usage: { input_tokens: number; output_tokens: number; total_tokens: number }
   }> {
-    // 转换消息格式
     const anthropicMessages = this.convertToAnthropicFormat(request.messages)
 
     const body: AnthropicMessagesRequest = {
@@ -290,18 +423,18 @@ export class ApiClient {
           'anthropic-dangerous-direct-browser-access': 'true',
         },
         body: JSON.stringify(body),
-      }
+      },
+      runtime.provider.name,
+      request.model
     )
 
     const data = response as AnthropicMessagesResponse
 
-    // 转换回统一格式
     const assistantMessage: AssistantMessage = {
       role: 'assistant',
       content: this.extractAnthropicContent(data.content),
     }
 
-    // 提取工具调用
     const toolCalls: ToolCall[] = []
     for (const block of data.content) {
       if (block.type === 'tool_use' && block.id && block.name && block.input) {
@@ -326,9 +459,6 @@ export class ApiClient {
     }
   }
 
-  /**
-   * OpenAI Chat Completions API
-   */
   private async chatOpenAI(
     runtime: RuntimeProvider,
     request: {
@@ -369,7 +499,9 @@ export class ApiClient {
           'Authorization': `Bearer ${runtime.apiKey}`,
         },
         body: JSON.stringify(body),
-      }
+      },
+      runtime.provider.name,
+      request.model
     )
 
     const data = response as ChatCompletionsResponse
@@ -385,9 +517,6 @@ export class ApiClient {
     }
   }
 
-  /**
-   * OpenAI Codex Responses API (simplified)
-   */
   private async chatCodex(
     runtime: RuntimeProvider,
     request: {
@@ -401,96 +530,18 @@ export class ApiClient {
     message: AssistantMessage
     usage: { input_tokens: number; output_tokens: number; total_tokens: number }
   }> {
-    // Codex uses similar format to chat completions
     return this.chatOpenAI(runtime, request)
   }
 
-  /**
-   * 可中断的 API 请求
-   * 
-   * Hermes-style interruptible call
-   */
-  async chatWithInterrupt(
-    runtime: RuntimeProvider,
-    request: {
-      model: string
-      messages: Message[]
-      tools?: ToolDefinition[]
-      max_tokens?: number
-      temperature?: number
-    },
-    config: InterruptibleCallConfig = {}
-  ): Promise<CallResult> {
-    const startTime = Date.now()
-    const timeout = config.timeout || 120000
-
-    // 创建 AbortController
-    let abortController: AbortController | null = null
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
-
-    if (typeof AbortController !== 'undefined') {
-      abortController = new AbortController()
-    }
-
-    // 设置超时
-    if (timeout > 0) {
-      timeoutId = setTimeout(() => {
-        abortController?.abort()
-        config.onInterrupt?.()
-      }, timeout)
-    }
-
-    try {
-      // 设置外部 signal
-      if (config.signal) {
-        config.signal.addEventListener('abort', () => {
-          abortController?.abort()
-          config.onInterrupt?.()
-        })
-      }
-
-      const result = await this.chat(runtime, request)
-
-      // 清除超时
-      if (timeoutId) clearTimeout(timeoutId)
-
-      return {
-        success: true,
-        response: result,
-        duration: Date.now() - startTime,
-      }
-    } catch (error: any) {
-      // 清除超时
-      if (timeoutId) clearTimeout(timeoutId)
-
-      // 检查是否被中断
-      if (abortController?.signal.aborted || error?.name === 'AbortError') {
-        return {
-          success: false,
-          interrupted: true,
-          error: 'Request interrupted',
-          duration: Date.now() - startTime,
-        }
-      }
-
-      return {
-        success: false,
-        error: error?.message || String(error),
-        duration: Date.now() - startTime,
-      }
-    }
-  }
-
-  /**
-   * 发送 HTTP 请求
-   */
   private async makeRequest(
     url: string,
     options: {
       method: string
       headers: Record<string, string>
       body: string
-    }
+    },
+    provider: string,
+    model?: string
   ): Promise<unknown> {
     const response = await fetch(url, {
       method: options.method,
@@ -499,70 +550,105 @@ export class ApiClient {
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`API request failed: ${response.status} ${error}`)
+      let errorData: unknown
+      try {
+        errorData = await response.json()
+      } catch {
+        errorData = await response.text()
+      }
+
+      const code = parseErrorFromResponse(response.status, errorData, provider)
+      const retryAfter = this.extractRetryAfter(response, errorData)
+
+      const error = createApiError(code, `API error ${response.status}`, {
+        status: response.status,
+        retryable: isRetryableCode(code),
+        retryAfter,
+        provider,
+        model,
+      })
+
+      throw error
     }
 
     return response.json()
   }
 
-  /**
-   * 转换消息格式 (unified → Anthropic)
-   */
-  private convertToAnthropicFormat(messages: Message[]): Message[] {
-    // Anthropic 格式: user/assistant 交替, system 单独
-    const result: Message[] = []
-    let hasSystem = false
-
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        hasSystem = true
-      }
-      result.push(msg)
+  private extractRetryAfter(response: Response, data: unknown): number | undefined {
+    const retryAfter = response.headers.get('retry-after')
+    if (retryAfter) {
+      const parsed = parseInt(retryAfter, 10)
+      if (!isNaN(parsed)) return parsed
     }
 
-    return result
+    // Try to extract from error body
+    if (typeof data === 'object' && data !== null) {
+      const err = data as Record<string, unknown>
+      if (err.retry_after) {
+        return parseInt(String(err.retry_after), 10)
+      }
+      if (err.error?.retry_after) {
+        return parseInt(String(err.error.retry_after), 10)
+      }
+    }
+
+    return undefined
   }
 
-  /**
-   * 提取 Anthropic 内容块
-   */
+  private normalizeError(error: unknown, provider?: string): ApiError {
+    if (error instanceof Error) {
+      if ('code' in error && typeof (error as any).code === 'string') {
+        return error as ApiError
+      }
+
+      if (error.name === 'AbortError' || error.name === 'CancellationError') {
+        return createApiError(ApiErrorCode.INTERRUPTED, 'Request interrupted', { provider })
+      }
+
+      if (error.message.includes('fetch') || error.message.includes('network')) {
+        return createApiError(ApiErrorCode.NETWORK_ERROR, error.message, { provider, retryable: true })
+      }
+
+      if (error.message.includes('timeout')) {
+        return createApiError(ApiErrorCode.TIMEOUT, error.message, { provider, retryable: true })
+      }
+    }
+
+    return createApiError(ApiErrorCode.UNKNOWN_ERROR, String(error), { provider })
+  }
+
+  private convertToAnthropicFormat(messages: Message[]): Message[] {
+    return messages.filter(m => m.role !== 'tool')
+  }
+
   private extractAnthropicContent(
     content: Array<{ type: string; text?: string }>
   ): string {
-    const texts: string[] = []
-
-    for (const block of content) {
-      if (block.type === 'text' && block.text) {
-        texts.push(block.text)
-      }
-    }
-
-    return texts.join('\n')
+    return content
+      .filter(block => block.type === 'text' && block.text)
+      .map(block => block.text!)
+      .join('\n')
   }
 }
 
 // ============================================================================
-// Fallback Chain
+// Fallback Chain with Exponential Backoff
 // ============================================================================
 
-/**
- * Provider 回退链
- * 
- * 当主 Provider 失败时，自动尝试回退列表
- */
 export class FallbackChain {
   private resolver: ProviderResolver
   private client: ApiClient
+  private strategy: RetryStrategy
 
-  constructor(resolver: ProviderResolver) {
+  constructor(
+    resolver: ProviderResolver,
+    strategy: Partial<RetryStrategy> = {}
+  ) {
     this.resolver = resolver
     this.client = new ApiClient(resolver)
+    this.strategy = { ...DEFAULT_RETRY_STRATEGY_CONFIG, ...strategy }
   }
 
-  /**
-   * 带回退的请求
-   */
   async execute(
     request: {
       messages: Message[]
@@ -572,7 +658,8 @@ export class FallbackChain {
     },
     config: FallbackConfig
   ): Promise<FallbackResult> {
-    const { providers, maxRetries = 3, retryDelay = 1000 } = config
+    const startTime = Date.now()
+    const { providers, maxRetries = 3, retryDelay = 1000, exponentialBackoff = true } = config
     let attempts = 0
 
     for (const p of providers) {
@@ -582,13 +669,11 @@ export class FallbackChain {
         explicitMode: p.mode,
       })
 
-      if (!runtime) {
-        continue
-      }
+      if (!runtime) continue
 
       attempts++
 
-      // 重试逻辑
+      // Retry with backoff for this provider
       for (let i = 0; i < maxRetries; i++) {
         try {
           const result = await this.client.chat(runtime, {
@@ -605,23 +690,28 @@ export class FallbackChain {
             model: p.model,
             response: result,
             attempts,
+            totalDuration: Date.now() - startTime,
           }
+
         } catch (error: any) {
-          // 401/403 不重试 - 认证问题
-          if (error?.status === 401 || error?.status === 403) {
-            break
+          const apiError = this.normalizeError(error)
+
+          // Non-retryable errors don't retry
+          if (!apiError.retryable) {
+            return {
+              success: false,
+              provider: p.provider,
+              model: p.model,
+              error: apiError,
+              attempts,
+              totalDuration: Date.now() - startTime,
+            }
           }
 
-          // 速率限制重试
-          if (error?.status === 429 && i < maxRetries - 1) {
-            await this.delay(retryDelay * Math.pow(2, i)) // 指数退避
-            continue
-          }
-
-          // 服务器错误重试
-          if (error?.status >= 500 && i < maxRetries - 1) {
-            await this.delay(retryDelay)
-            continue
+          // Check if we should retry
+          if (i < maxRetries - 1) {
+            const delay = this.calculateDelay(i, retryDelay, exponentialBackoff, apiError.retryAfter)
+            await this.delay(delay)
           }
         }
       }
@@ -629,27 +719,57 @@ export class FallbackChain {
 
     return {
       success: false,
-      error: 'All providers failed',
+      error: createApiError(ApiErrorCode.UNKNOWN_ERROR, 'All providers failed'),
       attempts,
+      totalDuration: Date.now() - startTime,
     }
+  }
+
+  private calculateDelay(
+    attempt: number,
+    baseDelay: number,
+    exponential: boolean,
+    retryAfter?: number
+  ): number {
+    // Honor server's retry-after if available
+    if (retryAfter) {
+      return retryAfter * 1000
+    }
+
+    let delay = exponential
+      ? baseDelay * Math.pow(this.strategy.exponentialBase, attempt)
+      : baseDelay
+
+    delay = Math.min(delay, this.strategy.maxDelay)
+
+    // Add jitter
+    if (this.strategy.jitter) {
+      delay = delay * (0.5 + Math.random() * 0.5)
+    }
+
+    return Math.floor(delay)
   }
 
   private delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
+
+  private normalizeError(error: unknown): ApiError {
+    if (error instanceof Error && 'code' in error) {
+      return error as ApiError
+    }
+    return createApiError(ApiErrorCode.UNKNOWN_ERROR, String(error))
+  }
 }
 
 // ============================================================================
-// Global Provider
+// Global Instances
 // ============================================================================
 
 export const globalProviderResolver = new ProviderResolver()
 export const globalApiClient = new ApiClient(globalProviderResolver)
 export const globalFallbackChain = new FallbackChain(globalProviderResolver)
 
-/**
- * 快捷方法: 解析 Provider
- */
 export function resolveRuntimeProvider(
   provider: string,
   model?: string
@@ -657,9 +777,6 @@ export function resolveRuntimeProvider(
   return globalProviderResolver.resolve({ provider, model })
 }
 
-/**
- * 快捷方法: 发送聊天请求
- */
 export async function chatComplete(
   runtime: RuntimeProvider,
   request: {
@@ -672,9 +789,6 @@ export async function chatComplete(
   return globalApiClient.chat(runtime, request)
 }
 
-/**
- * 快捷方法: 带超时的请求
- */
 export async function chatCompleteWithInterrupt(
   runtime: RuntimeProvider,
   request: {

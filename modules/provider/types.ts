@@ -1,12 +1,12 @@
 /**
- * Provider Types - Multi-API Mode Abstraction
- * 提供者类型 - Hermes 三 API 模式统一抽象
+ * Provider Types - Enhanced Error Handling
+ * 提供者类型 - 增强错误处理
  */
 
 import type { ToolCall } from '../registry/types'
 
 // ============================================================================
-// API Modes (Hermes-style)
+// API Modes
 // ============================================================================
 
 export type ApiMode = 'chat_completions' | 'codex_responses' | 'anthropic_messages'
@@ -34,6 +34,57 @@ export interface RuntimeProvider {
   mode: ApiMode
   apiKey: string
   baseUrl: string
+}
+
+// ============================================================================
+// Error Types (Enhanced)
+// ============================================================================
+
+export enum ApiErrorCode {
+  // Authentication
+  AUTH_REQUIRED = 'AUTH_REQUIRED',
+  AUTH_FAILED = 'AUTH_FAILED',
+  AUTH_EXPIRED = 'AUTH_EXPIRED',
+  
+  // Rate Limiting
+  RATE_LIMITED = 'RATE_LIMITED',
+  QUOTA_EXCEEDED = 'QUOTA_EXCEEDED',
+  TOKENS_EXCEEDED = 'TOKENS_EXCEEDED',
+  
+  // Server Errors
+  SERVER_ERROR = 'SERVER_ERROR',
+  SERVICE_UNAVAILABLE = 'SERVICE_UNAVAILABLE',
+  MODEL_OVERLOADED = 'MODEL_OVERLOADED',
+  
+  // Client Errors
+  INVALID_REQUEST = 'INVALID_REQUEST',
+  INVALID_MODEL = 'INVALID_MODEL',
+  CONTEXT_OVERFLOW = 'CONTEXT_OVERFLOW',
+  
+  // Network
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  TIMEOUT = 'TIMEOUT',
+  CONNECTION_FAILED = 'CONNECTION_FAILED',
+  
+  // General
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+  INTERRUPTED = 'INTERRUPTED',
+}
+
+export interface ApiError extends Error {
+  code: ApiErrorCode
+  status?: number
+  retryable: boolean
+  retryAfter?: number  // seconds
+  provider?: string
+  model?: string
+}
+
+export interface RateLimitInfo {
+  limited: boolean
+  retryAfter?: number
+  remaining?: number
+  resetAt?: number
 }
 
 // ============================================================================
@@ -145,14 +196,17 @@ export interface InterruptibleCallConfig {
   timeout?: number
   signal?: AbortSignal
   onInterrupt?: () => void
+  onRateLimit?: (info: RateLimitInfo) => void
+  onError?: (error: ApiError) => void
 }
 
 export interface CallResult {
   success: boolean
   response?: unknown
-  error?: string
+  error?: ApiError
   interrupted?: boolean
   duration?: number
+  attempts?: number
 }
 
 // ============================================================================
@@ -166,15 +220,10 @@ export interface ResolveProviderOptions {
 }
 
 export interface ProviderConfig {
-  /** Provider name (e.g., 'anthropic', 'openai', 'openrouter') */
   name: string
-  /** API mode */
   mode: ApiMode
-  /** Base URL */
   baseUrl: string
-  /** API key env var name */
   apiKeyEnv?: string
-  /** OAuth config */
   oauth?: {
     clientId: string
     scopes: string[]
@@ -195,6 +244,7 @@ export interface FallbackConfig {
   }>
   maxRetries?: number
   retryDelay?: number
+  exponentialBackoff?: boolean
 }
 
 export interface FallbackResult {
@@ -202,6 +252,43 @@ export interface FallbackResult {
   provider?: string
   model?: string
   response?: unknown
-  error?: string
+  error?: ApiError
   attempts: number
+  totalDuration: number
+}
+
+// ============================================================================
+// Retry Strategy
+// ============================================================================
+
+export interface RetryStrategy {
+  maxAttempts: number
+  baseDelay: number
+  maxDelay: number
+  exponentialBase: number
+  jitter: boolean
+}
+
+export const DEFAULT_RETRY_STRATEGY: RetryStrategy = {
+  maxAttempts: 3,
+  baseDelay: 1000,
+  maxDelay: 30000,
+  exponentialBase: 2,
+  jitter: true,
+}
+
+// ============================================================================
+// Provider Stats
+// ============================================================================
+
+export interface ProviderStats {
+  provider: string
+  totalRequests: number
+  successfulRequests: number
+  failedRequests: number
+  rateLimitedRequests: number
+  avgLatency: number
+  lastRequestAt: number | null
+  lastErrorAt: number | null
+  lastError?: ApiError
 }

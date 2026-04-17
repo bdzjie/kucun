@@ -206,3 +206,36 @@ export interface ToolCallResult {
   output: string
   is_error?: boolean
 }
+
+// ============================================================================
+// Tool Hooks (Hermes-style)
+// ============================================================================
+
+export type ToolHookEvent = 'pre_tool_call' | 'post_tool_call' | 'tool_call_error'
+
+export interface ToolHookContext {
+  toolName: string
+  input: unknown
+  context: ToolContext
+  sessionId?: string
+  userId?: string
+}
+
+export interface ToolHookResult {
+  allow: boolean
+  modified?: {
+    input?: unknown
+    output?: unknown
+  }
+  error?: string
+}
+
+export type ToolHook = (
+  ctx: ToolHookContext
+) => Promise<ToolHookResult> | ToolHookResult
+
+export interface ToolHooks {
+  pre_tool_call?: ToolHook[]
+  post_tool_call?: ToolHook[]
+  tool_call_error?: ToolHook[]
+}

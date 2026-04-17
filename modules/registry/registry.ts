@@ -399,6 +399,7 @@ const DEFAULT_TOOLSETS: Toolset[] = [
  * - Tool availability checking (check_fn)
  * - Toolset grouping
  * - OpenAI function calling schema generation
+ * - Tool execution hooks (pre/post)
  */
 export class ToolRegistry {
   private tools: Map<string, ToolEntry> = new Map()
@@ -406,6 +407,7 @@ export class ToolRegistry {
   private toolsets: Map<string, Toolset> = new Map()
   private config: RegistryConfig
   private stats: RegistryStats
+  private hooks: ToolHooks = {}
 
   constructor(config: Partial<RegistryConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -417,6 +419,109 @@ export class ToolRegistry {
     
     if (this.config.autoRegisterBuiltin) {
       this.registerDefaultTools()
+    }
+  }
+
+  // ============================================================================
+  // Hook System (Hermes-style)
+  // ============================================================================
+
+  /**
+   * Register tool hooks
+   */
+  registerHooks(hooks: ToolHooks): void {
+    if (hooks.pre_tool_call) {
+      this.hooks.pre_tool_call = [
+        ...(this.hooks.pre_tool_call || []),
+        ...hooks.pre_tool_call,
+      ]
+    }
+    if (hooks.post_tool_call) {
+      this.hooks.post_tool_call = [
+        ...(this.hooks.post_tool_call || []),
+        ...hooks.post_tool_call,
+      ]
+    }
+    if (hooks.tool_call_error) {
+      this.hooks.tool_call_error = [
+        ...(this.hooks.tool_call_error || []),
+        ...hooks.tool_call_error,
+      ]
+    }
+  }
+
+  /**
+   * Run pre-tool hooks
+   */
+  private async runPreHooks(ctx: ToolHookContext): Promise<{ allow: boolean; input: unknown }> {
+    const preHooks = this.hooks.pre_tool_call || []
+    let input = ctx.input
+
+    for (const hook of preHooks) {
+      try {
+        const result = await Promise.resolve(hook(ctx))
+        if (!result.allow) {
+          return { allow: false, input }
+        }
+        if (result.modified?.input) {
+          input = result.modified.input
+        }
+      } catch {
+        // Hook error doesn't block execution
+      }
+    }
+
+    return { allow: true, input }
+  }
+
+  /**
+   * Run post-tool hooks
+   */
+  private async runPostHooks(
+    ctx: ToolHookContext,
+    result: ToolResult
+  ): Promise<ToolResult> {
+    const postHooks = this.hooks.post_tool_call || []
+    let modifiedResult = result
+
+    for (const hook of postHooks) {
+      try {
+        const hookResult = await Promise.resolve(hook({
+          ...ctx,
+          input: modifiedResult,
+        }))
+        if (!hookResult.allow) {
+          return { success: false, error: hookResult.error || 'Hook denied' }
+        }
+        if (hookResult.modified?.output) {
+          modifiedResult = { ...modifiedResult, output: hookResult.modified.output }
+        }
+      } catch {
+        // Hook error doesn't modify result
+      }
+    }
+
+    return modifiedResult
+  }
+
+  /**
+   * Run error hooks
+   */
+  private async runErrorHooks(
+    ctx: ToolHookContext,
+    error: Error
+  ): Promise<void> {
+    const errorHooks = this.hooks.tool_call_error || []
+
+    for (const hook of errorHooks) {
+      try {
+        await Promise.resolve(hook({
+          ...ctx,
+          input: error,
+        }))
+      } catch {
+        // Hook error is ignored
+      }
     }
   }
 
@@ -647,7 +752,7 @@ export class ToolRegistry {
   // ============================================================================
 
   /**
-   * Execute a tool
+   * Execute a tool with hooks (Hermes-style)
    */
   async execute(
     name: string,
@@ -655,17 +760,26 @@ export class ToolRegistry {
     context: ToolContext = {}
   ): Promise<ToolResult> {
     const entry = this.getEntry(name)
-    
+
     if (!entry) {
       return { success: false, error: `Tool not found: ${name}` }
     }
-    
+
     const tool = entry.tool
-    
+
     if (!tool.enabled) {
       return { success: false, error: `Tool disabled: ${name}` }
     }
-    
+
+    // Build hook context
+    const hookCtx: ToolHookContext = {
+      toolName: name,
+      input,
+      context,
+      sessionId: context.sessionId,
+      userId: context.userId,
+    }
+
     // Run check_fn if present
     if (tool.check_fn) {
       try {
@@ -677,28 +791,41 @@ export class ToolRegistry {
         return { success: false, error: `Tool check failed: ${name}` }
       }
     }
-    
+
+    // Run pre-tool hooks
+    const preResult = await this.runPreHooks(hookCtx)
+    if (!preResult.allow) {
+      return { success: false, error: `Tool blocked by pre-hook: ${name}` }
+    }
+
     const startTime = Date.now()
     entry.callCount++
     this.stats.totalCalls++
-    
+
     try {
       let result: ToolResult
-      
+
+      // Execute with potentially modified input from hooks
       if (tool.is_async) {
-        result = await tool.execute(input, context)
+        result = await tool.execute(preResult.input, context)
       } else {
-        result = tool.execute(input, context) as ToolResult
+        result = tool.execute(preResult.input, context) as ToolResult
         if (result && typeof result.then === 'function') {
           result = await result
         }
       }
-      
+
+      // Run post-tool hooks
+      result = await this.runPostHooks(hookCtx, result)
+
       return {
         ...result,
         duration: Date.now() - startTime,
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Run error hooks
+      await this.runErrorHooks(hookCtx, error)
+
       return {
         success: false,
         error: String(error),

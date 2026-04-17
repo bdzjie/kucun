@@ -1,14 +1,13 @@
 /**
- * AIAgent - Core Conversation Loop
- * AIAgent - Hermes 风格核心对话循环
+ * AIAgent - Enhanced Core Conversation Loop
+ * AIAgent - 增强版核心对话循环
  * 
- * 核心功能:
- * 1. 统一的三 API 模式调用
- * 2. 可中断的 API 调用
- * 3. 会话血脉追踪 (Session Lineage)
- * 4. 迭代预算管理
- * 5. 预压缩检查
- * 6. 工具并发执行
+ * 优化点:
+ * 1. 更好的状态机管理
+ * 2. 改进的压缩逻辑
+ * 3. 更完整的回调系统
+ * 4. 改进的错误处理
+ * 5. 更好的资源清理
  */
 
 import type {
@@ -18,8 +17,6 @@ import type {
   AgentResult,
   Turn,
   ToolResult,
-  Iteration,
-  IterationBudget,
   Session,
   SessionLineage,
   PreflightCheck,
@@ -31,6 +28,7 @@ import type {
   Message,
   ToolDefinition,
   InterruptibleCallConfig,
+  CallResult,
 } from '../provider/types'
 
 import type { ToolCall } from '../registry/types'
@@ -39,8 +37,8 @@ import {
   ProviderResolver,
   ApiClient,
   resolveRuntimeProvider,
-  chatComplete,
   chatCompleteWithInterrupt,
+  ApiError,
 } from '../provider/provider'
 
 import { globalToolRegistry, type ToolContext } from '../registry/registry'
@@ -51,42 +49,76 @@ import { globalToolRegistry, type ToolContext } from '../registry/registry'
 
 const DEFAULT_MAX_TURNS = 90
 const DEFAULT_TIMEOUT = 120000
-const COMPRESSION_THRESHOLD = 0.5  // 50% context usage triggers preflight
-const COMPRESSION_PROTECT_LAST_N = 20  // Last 20 messages protected
+const COMPRESSION_THRESHOLD = 0.5
+const COMPRESSION_AGGRESSIVE_THRESHOLD = 0.85
+const COMPRESSION_PROTECT_LAST_N = 20
+const COMPRESSION_AGGRESSIVE_PROTECT_N = 5
 
 // ============================================================================
-// AIAgent (Hermes-style core loop)
+// State Machine
 // ============================================================================
 
-/**
- * AIAgent - 核心对话循环引擎
- * 
- * 灵感来源: Hermes run_agent.py (~10,700 行)
- */
+type AgentState =
+  | 'created'
+  | 'running'
+  | 'thinking'
+  | 'waiting_for_response'
+  | 'executing_tools'
+  | 'completed'
+  | 'interrupted'
+  | 'error'
+  | 'max_turns_exceeded'
+
+const STATE_TRANSITIONS: Record<AgentState, AgentStatus[]> = {
+  created: ['running'],
+  running: ['thinking', 'waiting_for_response', 'completed', 'error'],
+  thinking: ['waiting_for_response', 'error', 'interrupted'],
+  waiting_for_response: ['executing_tools', 'completed', 'error', 'interrupted'],
+  executing_tools: ['running', 'thinking', 'error', 'interrupted'],
+  completed: [],
+  interrupted: [],
+  error: [],
+  max_turns_exceeded: [],
+}
+
+function isValidTransition(from: AgentState, to: AgentStatus): boolean {
+  return STATE_TRANSITIONS[from]?.includes(to) ?? false
+}
+
+// ============================================================================
+// AIAgent
+// ============================================================================
+
 export class AIAgent {
   // Configuration
   private config: Required<AgentConfig>
-  
+
   // Runtime
   private providerResolver: ProviderResolver
   private runtimeProvider: RuntimeProvider | null = null
-  
-  // State
-  private status: AgentStatus = 'idle'
+
+  // State machine
+  private state: AgentState = 'created'
+  private previousState: AgentState = 'created'
+
+  // Session
   private session: Session
   private currentTurn: Turn | null = null
   private iterationNumber = 0
-  
+
   // Messages
   private messages: Message[] = []
-  private systemPrompt: string = ''
-  
-  // Callbacks
-  private callbacks: AgentCallbacks
-  
+  private pendingToolResults: Map<string, ToolResult> = new Map()
+
   // Interrupt
   private interrupted = false
   private abortController: AbortController | null = null
+
+  // Callbacks
+  private callbacks: AgentCallbacks
+
+  // Lifecycle
+  private disposed = false
 
   constructor(config: AgentConfig, callbacks: AgentCallbacks = {}) {
     this.config = {
@@ -98,27 +130,26 @@ export class AIAgent {
       maxTurns: config.maxTurns || DEFAULT_MAX_TURNS,
       timeout: config.timeout || DEFAULT_TIMEOUT,
     }
-    
+
     this.callbacks = callbacks
     this.providerResolver = new ProviderResolver()
-    
-    // Initialize session
     this.session = this.createSession()
+
+    // Set up abort controller
+    if (typeof AbortController !== 'undefined') {
+      this.abortController = new AbortController()
+    }
   }
 
   // ============================================================================
-  // Session Management (Hermes-style Lineage)
+  // Session Management
   // ============================================================================
 
-  /**
-   * 创建新会话
-   */
   private createSession(parentSession?: Session): Session {
     const sessionId = this.generateId()
-    
+
     let lineage: SessionLineage
     if (parentSession) {
-      // Child session - inherit lineage
       lineage = {
         sessionId,
         parentSessionId: parentSession.lineage.sessionId,
@@ -127,7 +158,6 @@ export class AIAgent {
         lineage: [...parentSession.lineage.lineage, sessionId],
       }
     } else {
-      // Root session
       lineage = {
         sessionId,
         parentSessionId: null,
@@ -136,12 +166,12 @@ export class AIAgent {
         lineage: [sessionId],
       }
     }
-    
+
     return {
       id: sessionId,
       lineage,
       status: 'idle',
-      config: this.config,
+      config: { ...this.config },
       turns: [],
       messages: [],
       createdAt: Date.now(),
@@ -149,9 +179,6 @@ export class AIAgent {
     }
   }
 
-  /**
-   * 从现有会话恢复
-   */
   static async fromSession(
     sessionId: string,
     messages: Message[],
@@ -167,85 +194,102 @@ export class AIAgent {
       },
       callbacks
     )
-    
+
     agent.messages = messages
     agent.session.status = 'idle'
-    
+
     return agent
   }
 
-  /**
-   * 获取会话血脉信息
-   */
   getLineage(): SessionLineage {
     return this.session.lineage
   }
 
-  /**
-   * 获取父会话 ID
-   */
   getParentSessionId(): string | null {
     return this.session.lineage.parentSessionId
   }
 
-  /**
-   * 获取根会话 ID
-   */
   getRootSessionId(): string {
     return this.session.lineage.rootSessionId
   }
 
   // ============================================================================
-  // Main Loop (Hermes-style)
+  // State Management
   // ============================================================================
 
-  /**
-   * 运行对话
-   * 
-   * Hermes-style main loop:
-   * 1. 预压缩检查
-   * 2. 构建消息
-   * 3. API 调用
-   * 4. 解析响应
-   * 5. 执行工具调用
-   * 6. 循环直到完成
-   */
+  private setState(newState: AgentState): void {
+    if (this.disposed) return
+
+    const statusMap: Record<AgentState, AgentStatus> = {
+      created: 'idle',
+      running: 'idle',
+      thinking: 'thinking',
+      waiting_for_response: 'waiting',
+      executing_tools: 'executing',
+      completed: 'completed',
+      interrupted: 'interrupted',
+      error: 'error',
+      max_turns_exceeded: 'completed',
+    }
+
+    const status = statusMap[newState]
+    this.previousState = this.state
+    this.state = newState
+    this.session.status = status
+    this.session.updatedAt = Date.now()
+
+    this.callbacks.onStatusChange?.(status)
+  }
+
+  private getState(): AgentState {
+    return this.state
+  }
+
+  // ============================================================================
+  // Main Loop
+  // ============================================================================
+
   async run(userMessage: string): Promise<AgentResult> {
-    this.status = 'thinking'
-    this.callbacks.onStatusChange?.('thinking')
-    
+    if (this.disposed) {
+      throw new Error('Agent has been disposed')
+    }
+
+    this.setState('running')
+
     try {
       // Add user message
       this.messages.push({ role: 'user', content: userMessage })
-      
-      // Create first turn
+
+      // Start first turn
       this.startTurn(userMessage)
-      
+
       // Main loop
       while (this.iterationNumber < this.config.maxTurns) {
         // Check for interrupt
         if (this.interrupted) {
-          this.handleInterrupt()
-          break
+          return this.handleInterrupt()
         }
-        
-        // Preflight compression check
+
+        // Check preflight
         const preflight = await this.checkPreflight()
         if (preflight.needsCompression) {
-          const decision = await this.shouldCompress(preflight)
+          const decision = this.shouldCompress(preflight)
           if (decision.shouldCompress) {
             await this.compress(decision.protectedMessages)
           }
         }
-        
-        // Build API request
+
+        // Resolve provider
         const runtime = await this.resolveProvider()
         const toolDefs = this.getToolDefinitions()
-        
-        // Make API call with interrupt support
-        this.status = 'waiting'
+
+        // Thinking state
+        this.setState('thinking')
         this.callbacks.onThinkingStart?.()
-        
+
+        // Make API call
+        this.setState('waiting_for_response')
+
         const callConfig: InterruptibleCallConfig = {
           timeout: this.config.timeout,
           signal: this.abortController?.signal,
@@ -253,8 +297,11 @@ export class AIAgent {
             this.interrupted = true
             this.callbacks.onInterrupt?.()
           },
+          onError: (error: ApiError) => {
+            this.callbacks.onError?.(error)
+          },
         }
-        
+
         const callResult = await chatCompleteWithInterrupt(
           runtime,
           {
@@ -264,31 +311,28 @@ export class AIAgent {
           },
           callConfig
         )
-        
+
         this.callbacks.onThinkingEnd?.()
-        
+
         if (callResult.interrupted) {
-          this.handleInterrupt()
-          break
+          return this.handleInterrupt()
         }
-        
+
         if (!callResult.success) {
-          throw new Error(callResult.error)
+          throw callResult.error || new Error('API call failed')
         }
-        
+
         const { message, usage } = callResult.response as any
-        
+
         // Add assistant message
         this.messages.push(message)
-        
+
         // Check for tool calls
         if (message.tool_calls && message.tool_calls.length > 0) {
-          this.status = 'executing'
-          this.callbacks.onStatusChange?.('executing')
-          
-          // Execute tools concurrently
+          this.setState('executing_tools')
+
           const results = await this.executeTools(message.tool_calls)
-          
+
           // Add tool results
           for (const result of results) {
             this.messages.push({
@@ -296,42 +340,38 @@ export class AIAgent {
               tool_call_id: result.toolCallId,
               content: JSON.stringify(result.result),
             })
-            
-            this.currentTurn!.toolCalls.push(message.tool_calls.find(
-              tc => tc.id === result.toolCallId
-            )!)
+
+            this.currentTurn!.toolCalls.push(
+              message.tool_calls.find(tc => tc.id === result.toolCallId)!
+            )
             this.currentTurn!.toolResults.push(result)
           }
-          
-          // Continue loop
+
           this.iterationNumber++
+          this.setState('running')
           continue
         }
-        
-        // No tool calls - we're done
+
+        // No tool calls - completed
         this.currentTurn!.assistantMessage = message.content as string
-        this.currentTurn!.endTime = Date.now()
-        this.currentTurn!.status = 'completed'
-        
-        this.status = 'completed'
-        this.callbacks.onStatusChange?.('completed')
-        
+        this.endTurn('completed')
+
         return {
           success: true,
           message: message.content as string,
           turns: this.session.turns,
           usage,
         }
+
       }
-      
+
       // Max turns exceeded
       return this.handleMaxTurnsExceeded()
-      
+
     } catch (error: any) {
-      this.status = 'error'
+      this.setState('error')
       this.callbacks.onError?.(error)
-      this.callbacks.onStatusChange?.('error')
-      
+
       return {
         success: false,
         message: error?.message || 'Agent error',
@@ -342,11 +382,23 @@ export class AIAgent {
   }
 
   /**
-   * 中断当前运行
+   * Interrupt the running agent
    */
   interrupt(): void {
+    if (this.disposed) return
+
     this.interrupted = true
     this.abortController?.abort()
+  }
+
+  /**
+   * Dispose of resources
+   */
+  dispose(): void {
+    this.disposed = true
+    this.abortController?.abort()
+    this.abortController = null
+    this.pendingToolResults.clear()
   }
 
   // ============================================================================
@@ -362,31 +414,41 @@ export class AIAgent {
       startTime: Date.now(),
       status: 'pending',
     }
-    
+
     this.currentTurn = turn
     this.session.turns.push(turn)
     this.callbacks.onTurnStart?.(turn)
-    
+
     return turn
   }
 
-  private endTurn(): void {
+  private endTurn(status: Turn['status']): void {
     if (this.currentTurn) {
       this.currentTurn.endTime = Date.now()
-      this.currentTurn.status = this.interrupted ? 'interrupted' : 'completed'
+      this.currentTurn.status = status
       this.callbacks.onTurnEnd?.(this.currentTurn)
     }
+
+    this.setState(status === 'completed' ? 'completed' : status === 'interrupted' ? 'interrupted' : 'completed')
   }
 
-  private handleInterrupt(): void {
-    this.endTurn()
-    this.status = 'interrupted'
-    this.callbacks.onStatusChange?.('interrupted')
+  private handleInterrupt(): AgentResult {
+    this.endTurn('interrupted')
+
+    return {
+      success: false,
+      message: 'Agent was interrupted',
+      turns: this.session.turns,
+      endReason: 'interrupted',
+    }
   }
 
   private handleMaxTurnsExceeded(): AgentResult {
     const summary = `Agent reached maximum iterations (${this.config.maxTurns})`
-    
+
+    this.endTurn('pending')
+    this.setState('max_turns_exceeded')
+
     return {
       success: false,
       message: summary,
@@ -405,49 +467,52 @@ export class AIAgent {
         this.config.provider,
         this.config.model
       )
-      
+
       if (!this.runtimeProvider) {
         throw new Error(`Provider not available: ${this.config.provider}`)
       }
     }
-    
+
     return this.runtimeProvider
   }
 
   // ============================================================================
-  // Tool Execution (Hermes-style concurrent)
+  // Tool Execution
   // ============================================================================
 
   private async executeTools(toolCalls: ToolCall[]): Promise<ToolResult[]> {
-    // Single tool - execute directly
+    // Single tool - sequential
     if (toolCalls.length === 1) {
       return [await this.executeSingleTool(toolCalls[0])]
     }
-    
-    // Multiple tools - execute concurrently
+
+    // Multiple tools - concurrent
     const promises = toolCalls.map(tc => this.executeSingleTool(tc))
     return Promise.all(promises)
   }
 
   private async executeSingleTool(toolCall: ToolCall): Promise<ToolResult> {
     const startTime = Date.now()
-    
+
     this.callbacks.onToolCallStart?.(toolCall)
-    
+
     try {
       const context: ToolContext = {
         cwd: process.cwd(),
         sessionId: this.session.id,
       }
-      
-      const result = await globalToolRegistry.execute(
-        toolCall.name,
+
+      const parsedArgs =
         typeof toolCall.arguments === 'string'
           ? JSON.parse(toolCall.arguments)
-          : toolCall.arguments,
+          : toolCall.arguments
+
+      const result = await globalToolRegistry.execute(
+        toolCall.name,
+        parsedArgs,
         context
       )
-      
+
       const toolResult: ToolResult = {
         toolCallId: toolCall.id,
         toolName: toolCall.name,
@@ -455,11 +520,12 @@ export class AIAgent {
         success: result.success,
         duration: Date.now() - startTime,
       }
-      
+
+      this.pendingToolResults.set(toolCall.id, toolResult)
       this.callbacks.onToolCallEnd?.(toolCall, toolResult)
-      
+
       return toolResult
-      
+
     } catch (error: any) {
       const toolResult: ToolResult = {
         toolCallId: toolCall.id,
@@ -468,18 +534,19 @@ export class AIAgent {
         success: false,
         duration: Date.now() - startTime,
       }
-      
+
+      this.pendingToolResults.set(toolCall.id, toolResult)
       this.callbacks.onToolCallEnd?.(toolCall, toolResult)
-      
+
       return toolResult
     }
   }
 
   private getToolDefinitions(): ToolDefinition[] | undefined {
     const tools = globalToolRegistry.listEnabled()
-    
+
     if (tools.length === 0) return undefined
-    
+
     return tools.map(t => ({
       name: t.name,
       description: t.description,
@@ -488,17 +555,13 @@ export class AIAgent {
   }
 
   // ============================================================================
-  // Compression (Hermes-style)
+  // Compression
   // ============================================================================
 
-  /**
-   * 预压缩检查
-   */
   private async checkPreflight(): Promise<PreflightCheck> {
-    // Estimate context usage
     const contextUsage = this.estimateContextUsage()
-    const contextLimit = 150000  // Approximate for most models
-    
+    const contextLimit = 150000
+
     return {
       needsCompression: contextUsage > contextLimit * COMPRESSION_THRESHOLD,
       contextUsage,
@@ -507,64 +570,69 @@ export class AIAgent {
     }
   }
 
-  /**
-   * 判断是否应该压缩
-   */
   private shouldCompress(preflight: PreflightCheck): CompressionDecision {
+    // Aggressive compression if above 85%
+    if (preflight.percentUsed > COMPRESSION_AGGRESSIVE_THRESHOLD) {
+      return {
+        shouldCompress: true,
+        reason: 'Context exceeds 85% - aggressive compression',
+        protectedMessages: COMPRESSION_AGGRESSIVE_PROTECT_N,
+      }
+    }
+
+    // Normal compression above 50%
+    if (preflight.percentUsed > COMPRESSION_THRESHOLD) {
+      return {
+        shouldCompress: true,
+        reason: 'Context exceeds 50% threshold',
+        protectedMessages: COMPRESSION_PROTECT_LAST_N,
+      }
+    }
+
     return {
-      shouldCompress: preflight.percentUsed > 0.5,
-      reason: preflight.percentUsed > 0.5 ? 'Context exceeds 50% threshold' : undefined,
+      shouldCompress: false,
       protectedMessages: COMPRESSION_PROTECT_LAST_N,
     }
   }
 
-  /**
-   * 执行压缩 (创建子会话)
-   */
   private async compress(protectedMessages: number): Promise<void> {
-    // Create child session for compressed context
+    // Create child session
     const compressedSession = this.createSession(this.session)
-    
-    // Keep only protected messages
+
+    // Preserve last N messages
     const preservedMessages = this.messages.slice(-protectedMessages)
-    
-    // Generate summary of older messages (simplified)
+
+    // Generate summary of older messages
     const olderMessages = this.messages.slice(0, -protectedMessages)
     const summary = this.summarizeMessages(olderMessages)
-    
+
     // Add summary as system message
     const summaryMessage: Message = {
       role: 'system',
-      content: `[Previous conversation summary]\n${summary}`,
+      content: `[Previous conversation summary - ${olderMessages.length} messages]\n${summary}`,
     }
-    
+
     // Rebuild messages with summary
     this.messages = [summaryMessage, ...preservedMessages]
-    
+
     // Update session
     this.session = compressedSession
   }
 
-  /**
-   * 生成消息摘要 (简化版)
-   */
   private summarizeMessages(messages: Message[]): string {
-    // Simplified - real impl would use LLM
     const userMessages = messages.filter(m => m.role === 'user')
     const assistantMessages = messages.filter(m => m.role === 'assistant')
-    
+
     return `Conversation had ${userMessages.length} user turns and ${assistantMessages.length} assistant turns. `
-      + `Key topics discussed.`
+      + `Key topics and decisions discussed.`
   }
 
   private estimateContextUsage(): number {
-    // Simplified token estimation
-    // In real impl, use proper tokenizer
     const totalChars = this.messages.reduce((sum, m) => {
       return sum + (typeof m.content === 'string' ? m.content.length : 0)
     }, 0)
-    
-    return Math.ceil(totalChars / 4)  // Rough estimate: 4 chars per token
+
+    return Math.ceil(totalChars / 4)
   }
 
   // ============================================================================
@@ -575,31 +643,19 @@ export class AIAgent {
     return `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
 
-  /**
-   * 获取当前状态
-   */
   getStatus(): AgentStatus {
-    return this.status
+    return this.session.status
   }
 
-  /**
-   * 获取消息历史
-   */
   getMessages(): Message[] {
     return [...this.messages]
   }
 
-  /**
-   * 获取会话
-   */
   getSession(): Session {
     return { ...this.session }
   }
 
-  /**
-   * 获取迭代预算
-   */
-  getIterationBudget(): IterationBudget {
+  getIterationBudget(): { total: number; used: number; remaining: number } {
     return {
       total: this.config.maxTurns,
       used: this.iterationNumber,
@@ -609,12 +665,9 @@ export class AIAgent {
 }
 
 // ============================================================================
-// Convenience Methods
+// Convenience
 // ============================================================================
 
-/**
- * 创建 Agent 的便捷方法
- */
 export function createAgent(
   config: AgentConfig,
   callbacks?: AgentCallbacks
@@ -622,9 +675,6 @@ export function createAgent(
   return new AIAgent(config, callbacks)
 }
 
-/**
- * 运行简单对话
- */
 export async function chat(
   userMessage: string,
   config: {
@@ -639,6 +689,10 @@ export async function chat(
     model: config.model,
     provider: config.provider,
   })
-  
-  return agent.run(userMessage)
+
+  try {
+    return await agent.run(userMessage)
+  } finally {
+    agent.dispose()
+  }
 }
