@@ -481,4 +481,146 @@ python tool_discovery.py manifest --tools discovered_tools.json
 
 ---
 
+## L3 Deep Search — BM25 全文搜索
+
+**构建日期**: 2026-04-18
+
+### 架构
+
+```
+modules/search/
+├── palace_search.ts          # BM25 搜索核心 (PalaceSearch 类)
+├── session_memory_bridge.ts  # Session → Memory 桥接
+├── sessionSearch.ts          # FTS5 会话搜索
+└── types.ts                  # 类型定义
+```
+
+### PalaceSearch — BM25 搜索引擎
+
+```typescript
+import { PalaceSearch, getGlobalPalaceSearch } from './modules'
+
+const search = getGlobalPalaceSearch()
+
+// 索引文档
+search.indexDocument({
+  id: 'drawer_001',
+  content: '用户偏好 Markdown 格式输出',
+  wing: 'wing_user',
+  room: 'preferences',
+  hall: 'hall_preferences',
+})
+
+// 搜索
+const results = search.search('Markdown 偏好', {
+  wing: 'wing_user',
+  limit: 10,
+  threshold: 0.1,
+})
+
+// results[0].doc.content    // 原始文档
+// results[0].score         // BM25 分数
+// results[0].snippet       // 上下文摘要
+// results[0].highlights    // 高亮片段
+```
+
+### BM25 参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| k1 | 1.5 | 词频饱和度 |
+| b | 0.75 | 文档长度归一化 |
+| IDF | log((N-n+0.5)/(n+0.5)+1) | 逆文档频率 |
+
+### 与 palace.ts 的关系
+
+`palace.ts` 的 `searchDrawers()` 现在委托给 `PalaceSearch`:
+
+```typescript
+// palace.ts 中的搜索现在使用 BM25
+const results = getGlobalPalaceSearch().search(query, { wing, room })
+```
+
+---
+
+## Session-Memory 桥接
+
+**文件**: `modules/search/session_memory_bridge.ts`
+
+将 SessionStore 中的会话自动沉淀到 Memory Palace:
+
+```typescript
+import { SessionMemoryBridge, startGlobalBridge } from './modules'
+
+// 启动全局桥接
+const bridge = await startGlobalBridge()
+
+// 监听事件
+bridge.on('session_saved', ({ sessionId, drawerId }) => {
+  console.log(`Session ${sessionId} → drawer ${drawerId}`)
+})
+```
+
+### 自动保存规则
+
+| 触发条件 | 行为 |
+|---------|------|
+| 会话结束 | 保存会话摘要到 wing_user/sessions |
+| 30 分钟沉寂 | 保存沉寂前的内容 |
+| 每条新消息 | 实时 BM25 索引 |
+
+---
+
+## Auto-Save 集成
+
+**文件**: `modules/memory/auto_save_integration.ts`
+
+连接 memory hooks → SessionStore → BM25 搜索的完整管道:
+
+```typescript
+import { AutoSave } from './modules/memory/auto_save_integration'
+
+const autoSave = new AutoSave({
+  sessionId: 'session-123',
+  saveInterval: 10,      // 每 10 条消息保存一次
+  wing: 'wing_user',
+  enableBM25: true,
+})
+
+await autoSave.start()
+
+// 每条新消息时调用
+await autoSave.onMessage('user', '我决定使用 Postgres')
+
+// 压缩前保存
+await autoSave.onPreCompact(fullConversationContent)
+
+// 结束会话
+await autoSave.end()
+```
+
+### 保存管道
+
+```
+onMessage() → triggerHook('message_count')
+  ↓ [每 saveInterval 条消息]
+executeAutoSave() → Extractor.extractMemories()
+  ↓ [按类型分类]
+addDrawer(wing, memoryType, content)
+  ↓
+PalaceSearch.indexDocument() [BM25]
+```
+
+### 5 种记忆类型自动分类
+
+| 类型 | 关键词 | Hall |
+|------|--------|------|
+| DECISIONS | decided, chose, going with, because | hall_facts |
+| PREFERENCES | prefer, always, never, my rule | hall_preferences |
+| MILESTONES | finally, breakthrough, worked!, achieved | hall_events |
+| PROBLEMS | broke, fix, issue, bug, failed | hall_discoveries |
+| EMOTIONAL | !, ?, love, hate, feel, think | hall_advice |
+
+---
+
 *最后更新: 2026-04-18*

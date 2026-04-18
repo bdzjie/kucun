@@ -26,6 +26,22 @@ export {
   type SearchQuery,
 } from './search'
 
+// Palace Search (BM25 L3 Deep Search)
+export {
+  PalaceSearch,
+  getGlobalPalaceSearch,
+  indexDrawer,
+  type SearchOptions,
+  type SearchHit,
+} from './search/palace_search'
+
+// Session-Memory Bridge
+export {
+  SessionMemoryBridge,
+  startGlobalBridge,
+  getGlobalBridge,
+} from './search/session_memory_bridge'
+
 // Provider Module (Hermes Multi-API Mode)
 export {
   ProviderResolver,
@@ -125,6 +141,13 @@ export {
   type IMemoryManager,
   type MemoryConfig,
 } from './memory'
+
+// Auto-Save Integration (Session → Memory Palace → BM25)
+export {
+  AutoSave,
+  wireSessionStoreToAutoSave,
+  quickSave,
+} from './memory/auto_save_integration'
 
 // Context Module
 export {
