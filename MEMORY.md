@@ -623,4 +623,62 @@ PalaceSearch.indexDocument() [BM25]
 
 ---
 
+## AutoSave Agent 集成
+
+**文件**: `modules/memory/auto_save_agent.ts`
+
+将 AutoSave 接入 AIAgent 的最简方式:
+
+```typescript
+import { createAutoSaveAgent } from './modules'
+
+const agent = createAutoSaveAgent(
+  { id: 's1', name: 'my-agent', type: 'local', model: 'claude-sonnet' },
+  { sessionId: 's1', wing: 'wing_user', saveInterval: 10 }
+)
+
+const result = await agent.run('帮我写一个 WebSocket 服务器')
+await agent.end()  // 自动保存
+```
+
+### 回调接线
+
+| AIAgent 回调 | AutoSave 行为 |
+|-------------|-------------|
+| `onTurnStart` | 记录用户消息 |
+| `onTurnEnd` | 记录助手消息 + 工具结果 |
+| `onToolCallEnd` | 重要输出(>200字)自动保存 |
+| `onInterrupt` | 压缩前紧急保存 |
+| `onStatusChange('completed')` | 结束所有 AutoSave |
+
+### 会话迁移
+
+```typescript
+import { migrateSessionToMemory } from './modules'
+
+// 服务重启后重建记忆
+const drawers = await migrateSessionToMemory('session-id', 'wing_user')
+```
+
+---
+
+## palace.ts L3 集成
+
+**变更**:
+- `addDrawer()` 自动同步到 BM25 索引
+- `searchDrawers()` 替换为 BM25 搜索
+- 保留 keyword fallback (BM25 失败时)
+
+```typescript
+// 添加记忆 → 自动索引
+const drawer = await addDrawer('wing_user', 'preferences', '喜欢 Markdown')
+// → BM25 indexDocument() 在后台同步
+
+// 搜索 → BM25
+const results = searchDrawers({ query: 'Markdown 偏好', wing: 'wing_user' })
+// → PalaceSearch.search() 返回 BM25 排名结果
+```
+
+---
+
 *最后更新: 2026-04-18*
