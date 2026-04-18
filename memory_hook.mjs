@@ -52,6 +52,68 @@ function writeJsonFile(filePath, data) {
 }
 
 // ============================================================================
+// Python Bridge — Connect to memory_system.py via subprocess
+// ============================================================================
+
+/**
+ * Call the Python memory_bridge script and return parsed JSON.
+ * Falls back gracefully if Python is unavailable.
+ */
+function callMemoryBridge(cmd, args = []) {
+  try {
+    const { execSync } = require('node:child_process');
+    const workspaceDir = 'C:/Users/Administrator/.openclaw/workspace';
+    const scriptPath = workspaceDir + '/scripts/memory_bridge.py';
+    const allArgs = [cmd, ...args];
+    const fullCmd = `python "${scriptPath}" ${allArgs.map(a => `"${a}"`).join(' ')}`;
+    const raw = execSync(fullCmd, { cwd: workspaceDir, timeout: 5000 });
+    return { ok: true, data: JSON.parse(raw.toString('utf8')) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Call Python memory bridge with JSON stdin.
+ */
+function callMemoryBridgeJson(cmd, inputData) {
+  try {
+    const { execSync } = require('node:child_process');
+    const workspaceDir = 'C:/Users/Administrator/.openclaw/workspace';
+    const scriptPath = workspaceDir + '/scripts/memory_bridge.py';
+    const jsonInput = JSON.stringify(inputData);
+    const fullCmd = `python "${scriptPath}" ${cmd}`;
+    const raw = execSync(fullCmd, { cwd: workspaceDir, input: jsonInput, timeout: 5000 });
+    return { ok: true, data: JSON.parse(raw.toString('utf8')) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+/**
+ * Retrieve memories from Python system via bridge.
+ */
+function pythonRecall(wing, room) {
+  const result = callMemoryBridge('recall', [wing, room || '']);
+  if (result.ok) return result.data;
+  return [];
+}
+
+/**
+ * Store a memory entry in Python system via bridge.
+ */
+function pythonRemember(content, wing, room, hall) {
+  const result = callMemoryBridgeJson('remember', {
+    content,
+    wing: wing || 'wing_user',
+    room: room || 'general',
+    hall: hall || null
+  });
+  if (result.ok) return result.data;
+  return null;
+}
+
+// ============================================================================
 // Turn Counter (for per-N-turn tool schema refresh)
 // ============================================================================
 
@@ -258,6 +320,9 @@ function storeVerifiedMemory(content, type, senderName, conversationId, sessionK
     turn: turnCount
   });
 
+  // Also persist to Python memory_system via bridge (dual-write)
+  pythonRemember(fullContent, wing, room, hall);
+
   console.log(`[memory_hook] Verified memory stored [${type}] turn=${turnCount}: "${content.slice(0, 60)}..."`);
 }
 
@@ -451,6 +516,20 @@ export async function onAgentBootstrap(event) {
     console.log(`[memory_hook] Injected L0 memory: ${l0.slice(0, 60)}`);
   } catch (error) {
     console.warn('[memory_hook] Failed to load L0 memory:', error.message);
+  }
+
+  // Enrich L0 with L1 memories from Python system via bridge
+  try {
+    const memories = pythonRecall('wing_user');
+    if (memories && memories.length > 0) {
+      const recent = memories.slice(0, 5).map(m => m.content).join('\n');
+      if (event.messages && recent) {
+        event.messages.push(`[Memory L1] Recent memories:\n${recent.slice(0, 500)}`);
+      }
+      console.log(`[memory_hook] Injected ${Math.min(memories.length, 5)} L1 memories from Python bridge`);
+    }
+  } catch (error) {
+    console.warn('[memory_hook] L1 injection from Python bridge failed:', error.message);
   }
 }
 
