@@ -681,4 +681,79 @@ const results = searchDrawers({ query: 'Markdown 偏好', wing: 'wing_user' })
 
 ---
 
+## 持久化层
+
+**文件**: `modules/memory/palace.ts`
+
+JSON 文件持久化，重启不丢失:
+
+```
+~/.openclaw/memory/palace_state.json
+```
+
+| 操作 | 持久化方式 |
+|------|-----------|
+| `addDrawer()` | 追加到内存 Map，2s 防抖写入 |
+| `deleteDrawer()` | 更新内存 Map，2s 防抖写入 |
+| 服务重启 | 启动时从 JSON 文件恢复 |
+| `flushStorage()` | 强制立即写入 |
+
+```typescript
+import { Palace } from './modules/memory/palace'
+
+// 强制保存
+Palace.flushStorage()
+```
+
+---
+
+## Extractor 质量改进
+
+**文件**: `modules/memory/extractor.ts`
+
+### 改进点
+
+| 改进 | 说明 |
+|------|------|
+| **带权重标记** | 强标记(如"decided")=2分，弱标记(如"finally")=1分 |
+| **最低阈值** | 需要 ≥2 分才分类为具体类型，否则为 general |
+| **置信度重算** | `0.4 + score/10 + strongBonus`，无匹配=0.05 |
+| **强匹配 bonus** | 每个强标记 +0.1 |
+| **最低置信度** | 只保存 confidence ≥0.3 的记忆 |
+
+### 标记权重示例
+
+| 类型 | 强标记(2分) | 弱标记(1分) |
+|------|------------|------------|
+| decision | we decided, because..., trade-off | better to, approach |
+| preference | I prefer, always use, never use | I like, imperative |
+| milestone | fixed it, breakthrough, first time ever | finally, demo |
+| problem | bug, root cause, the fix was | workaround, that's why |
+| emotional | I love, I hate, I feel | angry, sorry |
+
+---
+
+## SessionStore 事件系统
+
+**文件**: `modules/search/sessionSearch.ts`
+
+`SessionStore` 现在继承 `EventEmitter`，支持以下事件:
+
+```typescript
+const store = new SessionStore()
+
+store.on('message', (msg) => {
+  // msg.sessionId, msg.role, msg.content, msg.timestamp
+})
+
+store.on('session_end', ({ sessionId }) => {
+  // 会话结束
+})
+
+store.appendMessage({ sessionId: 's1', role: 'user', content: 'Hello' })
+// → 触发 'message' 事件
+```
+
+---
+
 *最后更新: 2026-04-18*

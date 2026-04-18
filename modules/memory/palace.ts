@@ -139,6 +139,9 @@ export async function addDrawer(
   const roomData = storage.rooms.get(roomKey)!
   roomData.drawerCount++
 
+  // Persist state (debounced)
+  saveStorage()
+
   return drawer
 }
 
@@ -232,6 +235,9 @@ export function deleteDrawer(drawerId: string): boolean {
   const roomKey = `${drawer.wing}:${drawer.room}`
   const roomData = storage.rooms.get(roomKey)
   if (roomData) roomData.drawerCount = Math.max(0, roomData.drawerCount - 1)
+
+  // Persist state (debounced)
+  saveStorage()
 
   return true
 }
@@ -488,6 +494,137 @@ export function getGraphStats(): {
 }
 
 // ============================================================================
+// Persistence Layer (JSON file-based)
+// ============================================================================
+
+/** Path to the palace state file */
+const PALACE_STATE_PATH = path.join(
+  process.env.HOME || process.env.USERPROFILE || '.',
+  '.openclaw',
+  'memory',
+  'palace_state.json'
+)
+
+/** Debounce timer for saves */
+let _saveTimer: ReturnType<typeof setTimeout> | null = null
+const SAVE_DEBOUNCE_MS = 2000
+
+/**
+ * Load palace state from disk.
+ * Called once at module initialization.
+ */
+function loadStorage(): void {
+  try {
+    if (!fs.existsSync(PALACE_STATE_PATH)) {
+      return
+    }
+
+    const raw = fs.readFileSync(PALACE_STATE_PATH, 'utf-8')
+    const data = JSON.parse(raw) as {
+      drawers?: Array<[string, Drawer]>
+      wings?: Array<[string, Wing]>
+      rooms?: Array<[string, Room]>
+    }
+
+    if (data.drawers) {
+      for (const [id, drawer] of data.drawers) {
+        // Reconstruct Date objects
+        drawer.filedAt = new Date(drawer.filedAt)
+        storage.drawers.set(id, drawer)
+      }
+    }
+
+    if (data.wings) {
+      for (const [id, wing] of data.wings) {
+        wing.createdAt = new Date(wing.createdAt)
+        wing.updatedAt = new Date(wing.updatedAt)
+        storage.wings.set(id, wing)
+      }
+    }
+
+    if (data.rooms) {
+      for (const [id, room] of data.rooms) {
+        storage.rooms.set(id, room)
+      }
+    }
+
+    console.log(`[Palace] Loaded ${storage.drawers.size} drawers from ${PALACE_STATE_PATH}`)
+  } catch (error) {
+    console.warn('[Palace] Failed to load state:', error)
+  }
+}
+
+/**
+ * Save palace state to disk (debounced).
+ * Called after mutations.
+ */
+function saveStorage(): void {
+  if (_saveTimer) {
+    clearTimeout(_saveTimer)
+  }
+
+  _saveTimer = setTimeout(() => {
+    try {
+      const dir = path.dirname(PALACE_STATE_PATH)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+
+      const data = {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        drawers: Array.from(storage.drawers.entries()),
+        wings: Array.from(storage.wings.entries()),
+        rooms: Array.from(storage.rooms.entries()),
+      }
+
+      fs.writeFileSync(PALACE_STATE_PATH, JSON.stringify(data, null, 2), 'utf-8')
+      console.log(`[Palace] Saved ${storage.drawers.size} drawers to ${PALACE_STATE_PATH}`)
+    } catch (error) {
+      console.warn('[Palace] Failed to save state:', error)
+    }
+    _saveTimer = null
+  }, SAVE_DEBOUNCE_MS)
+}
+
+/**
+ * Force an immediate save (flush).
+ */
+export function flushStorage(): void {
+  if (_saveTimer) {
+    clearTimeout(_saveTimer)
+    _saveTimer = null
+  }
+  // Synchronously save
+  try {
+    const dir = path.dirname(PALACE_STATE_PATH)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    const data = {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      drawers: Array.from(storage.drawers.entries()),
+      wings: Array.from(storage.wings.entries()),
+      rooms: Array.from(storage.rooms.entries()),
+    }
+    fs.writeFileSync(PALACE_STATE_PATH, JSON.stringify(data, null, 2), 'utf-8')
+  } catch (error) {
+    console.warn('[Palace] Failed to flush state:', error)
+  }
+}
+
+// Load state at startup
+loadStorage()
+
+// Re-index loaded drawers into BM25
+for (const drawer of storage.drawers.values()) {
+  try {
+    indexDrawer(getGlobalPalaceSearch(), drawer)
+  } catch { /* ignore */ }
+}
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -505,6 +642,7 @@ export const Palace = {
   listRooms,
   checkDuplicate,
   getGraphStats,
+  flushStorage,
 }
 
 export default Palace

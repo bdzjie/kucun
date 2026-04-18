@@ -3,6 +3,7 @@
  * 会话搜索 - Hermes FTS5 风格实现
  */
 
+import { EventEmitter } from '../eventEmitter'
 import type {
   SearchableMessage,
   SearchResult,
@@ -224,7 +225,7 @@ class FtsIndex {
  * In-memory session store with FTS5-style search
  * Mirrors Hermes's hermes_state.py SQLite + FTS5 approach
  */
-export class SessionStore {
+export class SessionStore extends EventEmitter {
   private sessions: Map<string, SessionInfo> = new Map()
   private messages: Map<string, SearchableMessage[]> = new Map()
   private ftsIndex: FtsIndex = new FtsIndex()
@@ -237,6 +238,7 @@ export class SessionStore {
   }
 
   constructor(config: SessionStoreConfig = {}) {
+    super()
     this.config = {
       dbPath: config.dbPath || 'memory://sessions',
       walMode: config.walMode ?? true,
@@ -279,6 +281,8 @@ export class SessionStore {
       session.endedAt = Date.now()
       // Don't remove from sessions - keep for history
     }
+    // Emit session_end event (for AutoSave bridge)
+    this.emit('session_end', { sessionId: options.sessionId })
   }
 
   /**
@@ -379,7 +383,19 @@ export class SessionStore {
         timestamp: message.timestamp,
       })
     }
-    
+
+    // Emit message event (for AutoSave bridge)
+    this.emit('message', {
+      sessionId: options.sessionId,
+      role: options.role,
+      content: options.content,
+      toolCallId: options.toolCallId,
+      toolCalls: options.toolCalls,
+      toolName: options.toolName,
+      timestamp: message.timestamp,
+      messageId: id,
+    })
+
     return id
   }
 
