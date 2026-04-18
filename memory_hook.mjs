@@ -30,6 +30,7 @@ const L4_DIR = MEMORY_DIR + '/L4_raw_sessions';
 
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 
 function ensureMemoryDir() {
   if (!existsSync(MEMORY_DIR)) {
@@ -51,6 +52,9 @@ function writeJsonFile(filePath, data) {
   writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
+// Allow require() in ESM context (needed for subprocess calls)
+const $require = createRequire(import.meta.url);
+
 // ============================================================================
 // Python Bridge — Connect to memory_system.py via subprocess
 // ============================================================================
@@ -61,13 +65,18 @@ function writeJsonFile(filePath, data) {
  */
 function callMemoryBridge(cmd, args = []) {
   try {
-    const { execSync } = require('node:child_process');
+    const { execSync } = $require('node:child_process');
+    // Use explicit python.exe path (avoid PATH resolution issues in hook context)
+    const PYTHON_EXE = 'C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe';
     const workspaceDir = 'C:/Users/Administrator/.openclaw/workspace';
     const scriptPath = workspaceDir + '/scripts/memory_bridge.py';
     const allArgs = [cmd, ...args];
-    const fullCmd = `python "${scriptPath}" ${allArgs.map(a => `"${a}"`).join(' ')}`;
-    const raw = execSync(fullCmd, { cwd: workspaceDir, timeout: 5000 });
-    return { ok: true, data: JSON.parse(raw.toString('utf8')) };
+    const fullCmd = `"${PYTHON_EXE}" "${scriptPath}" ${allArgs.map(a => `"${a}"`).join(' ')}`;
+    // Set PYTHONIOENCODING=utf-8 to force Python stdout to use UTF-8 (avoids Windows CP936 issue)
+    const envWithUtf8 = { ...process.env, PYTHONIOENCODING: 'utf-8' };
+    const raw = execSync(fullCmd, { cwd: workspaceDir, timeout: 5000, env: envWithUtf8 });
+    const text = Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw);
+    return { ok: true, data: JSON.parse(text) };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -78,13 +87,16 @@ function callMemoryBridge(cmd, args = []) {
  */
 function callMemoryBridgeJson(cmd, inputData) {
   try {
-    const { execSync } = require('node:child_process');
+    const { execSync } = $require('node:child_process');
+    const PYTHON_EXE = 'C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe';
     const workspaceDir = 'C:/Users/Administrator/.openclaw/workspace';
     const scriptPath = workspaceDir + '/scripts/memory_bridge.py';
     const jsonInput = JSON.stringify(inputData);
-    const fullCmd = `python "${scriptPath}" ${cmd}`;
-    const raw = execSync(fullCmd, { cwd: workspaceDir, input: jsonInput, timeout: 5000 });
-    return { ok: true, data: JSON.parse(raw.toString('utf8')) };
+    const fullCmd = `"${PYTHON_EXE}" "${scriptPath}" ${cmd}`;
+    const envWithUtf8 = { ...process.env, PYTHONIOENCODING: 'utf-8' };
+    const raw = execSync(fullCmd, { cwd: workspaceDir, input: jsonInput, timeout: 5000, env: envWithUtf8 });
+    const text = Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw);
+    return { ok: true, data: JSON.parse(text) };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -96,6 +108,7 @@ function callMemoryBridgeJson(cmd, inputData) {
 function pythonRecall(wing, room) {
   const result = callMemoryBridge('recall', [wing, room || '']);
   if (result.ok) return result.data;
+  console.warn('[memory_hook] pythonRecall failed:', result.error || 'unknown error');
   return [];
 }
 
@@ -519,8 +532,10 @@ export async function onAgentBootstrap(event) {
   }
 
   // Enrich L0 with L1 memories from Python system via bridge
+  console.log('[memory_hook] Attempting L1 injection from Python bridge...');
   try {
     const memories = pythonRecall('wing_user');
+    console.log('[memory_hook] pythonRecall returned:', memories?.length, 'memories');
     if (memories && memories.length > 0) {
       const recent = memories.slice(0, 5).map(m => m.content).join('\n');
       if (event.messages && recent) {
