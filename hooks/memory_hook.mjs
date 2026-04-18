@@ -2,159 +2,281 @@
  * memory_hook.mjs — OpenClaw Internal Hook for Auto-Save Memory
  * ============================================================
  *
- * Registers internal hooks for:
- *   agent:bootstrap  → Initialize memory system, load L0+L1
- *   message:preprocessed → Auto-index message to BM25
- *   session:patch   → Detect session end (title change to ended state)
+ * Opens: ~/.openclaw/memory/memories.jsonl (append-only WAL)
+ *        ~/.openclaw/memory/palace_state.json (palace drawer state)
  *
- * Config in openclaw.json:
- *   {
- *     "hooks": {
- *       "internal": {
- *         "enabled": true,
- *         "handlers": [
- *           {
- *             "event": "agent:bootstrap",
- *             "module": "C:/Users/Administrator/.openclaw/workspace/hooks/memory_hook.mjs",
- *             "export": "onAgentBootstrap"
- *           },
- *           {
- *             "event": "message:preprocessed",
- *             "module": "C:/Users/Administrator/.openclaw/workspace/hooks/memory_hook.mjs",
- *             "export": "onMessagePreprocessed"
- *           }
- *         ]
- *       }
- *     }
- *   }
+ * This is a PURE JavaScript module — no TypeScript compilation required.
+ * OpenClaw loads it as a legacy hook (trusted local code).
  */
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const STATE_DIR = 'C:/Users/Administrator/.openclaw';
+const MEMORY_DIR = STATE_DIR + '/memory';
+const MEMORIES_FILE = MEMORY_DIR + '/memories.jsonl';
+const PALACE_FILE = MEMORY_DIR + '/palace_state.json';
+const IDENTITY_FILE = MEMORY_DIR + '/identity.json';
+
+// ============================================================================
+// File Helpers
+// ============================================================================
+
+import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+function ensureMemoryDir() {
+  if (!existsSync(MEMORY_DIR)) {
+    mkdirSync(MEMORY_DIR, { recursive: true });
+  }
+}
+
+function readJsonFile(filePath, fallback = null) {
+  try {
+    if (!existsSync(filePath)) return fallback;
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonFile(filePath, data) {
+  ensureMemoryDir();
+  writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// ============================================================================
+// Memory Operations
+// ============================================================================
+
+/**
+ * Load L0 identity content for agent bootstrap.
+ */
+function getL0Content() {
+  const identity = readJsonFile(IDENTITY_FILE, {});
+  const name = identity?.name || 'Q仔';
+  const role = identity?.role || 'AI 商务助理';
+  return `[Identity] Name: ${name} | Role: ${role} | Vibe: 专业、高效、直接`;
+}
+
+/**
+ * Append a memory entry to the WAL file.
+ */
+function appendMemoryEntry(entry) {
+  ensureMemoryDir();
+  const line = JSON.stringify({
+    ...entry,
+    timestamp: Date.now(),
+    id: entry.id || `mem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  }) + '\n';
+  appendFileSync(MEMORIES_FILE, line, 'utf8');
+}
+
+/**
+ * Add a palace drawer (BM25-indexed memory).
+ */
+function addPalaceDrawer(wing, room, hall, content, metadata = {}) {
+  const palace = readJsonFile(PALACE_FILE, { drawers: [] });
+  const drawer = {
+    id: `drawer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    wing,
+    room,
+    hall,
+    content,
+    metadata,
+    addedAt: Date.now()
+  };
+  palace.drawers = palace.drawers || [];
+  palace.drawers.push(drawer);
+  writeJsonFile(PALACE_FILE, palace);
+  return drawer;
+}
+
+/**
+ * Classify text into memory type (simple keyword-based classifier).
+ */
+function classifyText(text) {
+  const lower = text.toLowerCase();
+  const markers = {
+    decision: ['decided', 'chose', 'going with', 'because', 'trade-off', 'better to', 'approach', '的选择', '决定', '因为'],
+    preference: ['prefer', 'always', 'never', 'my rule', '喜欢', '偏好', '从不', '一定'],
+    milestone: ['fixed it', 'breakthrough', 'finally', 'worked', 'achieved', '成功', '终于', '突破', '第一次'],
+    problem: ['bug', 'root cause', 'fix was', 'issue', 'failed', 'broke', '问题', '错误', '修复'],
+    emotional: ['love', 'hate', 'feel', 'angry', 'sorry', 'excited', '喜欢', '讨厌', '感觉', '!']
+  };
+
+  let bestType = 'general';
+  let bestScore = 0;
+
+  for (const [type, keywords] of Object.entries(markers)) {
+    let score = 0;
+    for (const kw of keywords) {
+      if (lower.includes(kw)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestType = type;
+    }
+  }
+
+  return bestScore >= 1 ? bestType : 'general';
+}
+
+/**
+ * Extract memory from a message and store it.
+ */
+function extractAndStoreMemory(content, senderName, conversationId, sessionKey) {
+  if (!content || content.trim().length < 15) return;
+
+  const type = classifyText(content);
+  if (type === 'general') return;
+
+  const wing = 'wing_user';
+  const room = conversationId ? `session_${conversationId.slice(0, 8)}` : 'session_general';
+  const hall = type === 'decision' ? 'hall_facts'
+    : type === 'preference' ? 'hall_preferences'
+    : type === 'milestone' || type === 'problem' ? 'hall_events'
+    : 'hall_advice';
+
+  const drawer = addPalaceDrawer(wing, room, hall, content, {
+    senderName,
+    conversationId,
+    sessionKey,
+    type
+  });
+
+  appendMemoryEntry({
+    type: 'auto_saved_memory',
+    drawerId: drawer.id,
+    wing,
+    room,
+    hall,
+    content,
+    senderName,
+    conversationId,
+    sessionKey
+  });
+
+  console.log(`[memory_hook] Stored ${type} memory: "${content.slice(0, 50)}..."`);
+}
+
+// ============================================================================
+// BM25 Index (in-memory, rebuilt from palace_state.json on load)
+// ============================================================================
+
+// Simple in-memory BM25 index — rebuilt from palace_state.json
+const bm25Index = new Map(); // term -> [{docId, tf, positions}]
+
+function tokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^\w\s\u4e00-\u9fff]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 1);
+}
+
+function buildBm25Index() {
+  const palace = readJsonFile(PALACE_FILE, { drawers: [] });
+  bm25Index.clear();
+  const N = palace.drawers?.length || 1;
+
+  for (const drawer of (palace.drawers || [])) {
+    const terms = tokenize(drawer.content);
+    const termFreq = new Map();
+    for (const term of terms) {
+      termFreq.set(term, (termFreq.get(term) || 0) + 1);
+    }
+
+    for (const [term, tf] of termFreq) {
+      if (!bm25Index.has(term)) {
+        bm25Index.set(term, { df: 0, docs: [] });
+      }
+      const entry = bm25Index.get(term);
+      entry.df++;
+      entry.docs.push({ docId: drawer.id, tf, docLen: terms.length });
+    }
+  }
+}
 
 // ============================================================================
 // Hook Handlers
 // ============================================================================
 
 /**
- * agent:bootstrap — Initialize memory system when agent starts.
- * Loads L0 identity and L1 essential facts into context.
+ * agent:bootstrap — Inject L0 identity into agent context.
  */
 export async function onAgentBootstrap(event) {
-  const { context } = event
-  const { sessionKey, workspaceDir } = context
-
-  console.log(`[memory_hook] agent:bootstrap session=${sessionKey} workspace=${workspaceDir}`)
+  const { sessionKey, workspaceDir } = event.context || {};
+  console.log(`[memory_hook] agent:bootstrap session=${sessionKey} workspace=${workspaceDir}`);
 
   try {
-    // Dynamically import memory modules
-    // Note: In OpenClaw context, we can use absolute paths
-    const { getLayer0 } = await import('../modules/memory/memoryStack.js')
-    const { wakeUp } = await import('../modules/memory/memoryStack.js')
-
-    // Get memory wake-up content
-    const { layer0, layer1, totalTokens } = await wakeUp()
-
-    // Inject into hook context messages for the agent to pick up
+    const l0 = getL0Content();
     if (event.messages) {
-      event.messages.push(`[Memory L0] ${layer0.content}`)
-      if (layer1.content.length > 0) {
-        event.messages.push(`[Memory L1] ${layer1.content}`)
-      }
-      console.log(`[memory_hook] Loaded ${totalTokens} memory tokens (L0+L1)`)
+      event.messages.push(`[Memory L0] ${l0}`);
     }
+    console.log(`[memory_hook] Injected L0 memory: ${l0.slice(0, 60)}`);
   } catch (error) {
-    console.warn('[memory_hook] Failed to load memory on bootstrap:', error.message)
+    console.warn('[memory_hook] Failed to load L0 memory:', error.message);
   }
 }
 
 /**
- * message:preprocessed — Auto-index each message to BM25 search.
- * Does lightweight real-time indexing without full extraction.
+ * message:preprocessed — Auto-save important messages to memory.
  */
 export async function onMessagePreprocessed(event) {
-  const { context } = event
-  const { content, senderId, senderName, conversationId } = context
+  const { context } = event;
+  const { content, senderId, senderName, conversationId } = context || {};
 
-  if (!content || content.trim().length < 10) return
+  if (!content || content.trim().length < 15) return;
 
   try {
-    const { getGlobalPalaceSearch } = await import('../modules/search/palace_search.js')
-
-    const search = getGlobalPalaceSearch()
-    const docId = `msg:${conversationId || 'unknown'}:${Date.now()}`
-
-    search.indexDocument({
-      id: docId,
-      content: `[${senderName || senderId || 'unknown'}]: ${content}`,
-      wing: 'wing_user',
-      room: 'sessions',
-      hall: 'hall_events',
-      timestamp: Date.now(),
-      metadata: {
-        senderId,
-        senderName,
-        conversationId,
-        sessionKey: event.sessionKey,
-      },
-    })
-
-    console.log(`[memory_hook] Indexed message from ${senderName || senderId}`)
+    extractAndStoreMemory(
+      content,
+      senderName || senderId || 'unknown',
+      conversationId,
+      event.sessionKey
+    );
   } catch (error) {
-    // Non-critical — don't fail the message pipeline
-    console.warn('[memory_hook] BM25 indexing failed:', error.message)
+    console.warn('[memory_hook] Failed to extract memory:', error.message);
   }
 }
 
 /**
- * session:patch — Detect session end and trigger final memory save.
- * When session.endedAt is set, save all accumulated context.
+ * session:patch — Detect session end and trigger final save.
  */
 export async function onSessionPatch(event) {
-  const { context } = event
-  const { sessionEntry, patch } = context
+  const { context } = event;
+  const { sessionEntry, patch } = context || {};
 
-  // Detect session end
-  const endedAt = patch?.endedAt
-  if (!endedAt) return
+  const endedAt = patch?.endedAt;
+  if (!endedAt) return;
 
-  console.log(`[memory_hook] session:end sessionKey=${event.sessionKey}`)
+  console.log(`[memory_hook] session:end sessionKey=${event.sessionKey}`);
 
   try {
-    // Trigger session end save via the memory bridge
-    const { getGlobalBridge } = await import('../modules/search/session_memory_bridge.js')
-    const bridge = getGlobalBridge()
-
-    if (bridge) {
-      await bridge.saveSession(sessionEntry?.sessionKey || event.sessionKey)
-    } else {
-      console.warn('[memory_hook] No global bridge available')
-    }
+    appendMemoryEntry({
+      type: 'session_end',
+      sessionKey: event.sessionKey,
+      endedAt,
+      sessionEntry
+    });
+    console.log(`[memory_hook] Session end logged: ${event.sessionKey}`);
   } catch (error) {
-    console.warn('[memory_hook] Session end save failed:', error.message)
+    console.warn('[memory_hook] Failed to log session end:', error.message);
   }
 }
 
 // ============================================================================
-// Default export (required by module loader)
+// Default export — OpenClaw calls this at module load time.
+// The loader then registers the named exports (onAgentBootstrap, etc.) internally.
 // ============================================================================
 
-/**
- * Default export — called when module is first loaded.
- * Registers all internal hooks.
- */
 export default async function memoryHookExtension(api) {
-  console.log('[memory_hook] Loading memory hook extension...')
-
+  console.log('[memory_hook] Module loaded. Building BM25 index from palace state...');
   try {
-    // Import registerInternalHook from the plugin-sdk
-    const { registerInternalHook } = await import('@openclaw/plugin-sdk/internal-hooks')
-
-    // Register handlers
-    registerInternalHook('agent:bootstrap', onAgentBootstrap)
-    registerInternalHook('message:preprocessed', onMessagePreprocessed)
-    registerInternalHook('session:patch', onSessionPatch)
-
-    console.log('[memory_hook] Registered: agent:bootstrap, message:preprocessed, session:patch')
+    buildBm25Index();
+    console.log('[memory_hook] BM25 index built. Hook handlers: agent:bootstrap, message:preprocessed, session:patch');
   } catch (error) {
-    console.error('[memory_hook] Failed to register hooks:', error.message)
-    // Don't re-throw — allow OpenClaw to continue without memory hooks
+    console.warn('[memory_hook] BM25 index build failed:', error.message);
   }
 }
