@@ -291,25 +291,54 @@ function crystallizeAll() {
   return { generated };
 }
 
+/**
+ * Find SOPs using word-overlap scoring (BM25-like ranking).
+ * Score = matched query words / total query words, weighted by position.
+ */
 function findSimilarTasks(query) {
   const registry = loadRegistry();
-  const queryLower = query.toLowerCase();
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 1);
 
   console.log(`\n🔍 Searching for similar tasks to: "${query}"`);
+  console.log(`   Query words: ${queryWords.join(', ')}`);
   console.log('');
 
-  const matches = registry.sops?.filter(sop => {
-    const trigger = (sop.trigger || '').toLowerCase();
-    const steps = (sop.fragment?.steps || '').toLowerCase();
-    return trigger.includes(queryLower) || steps.includes(queryLower);
+  if (queryWords.length === 0) {
+    console.log('  No query words to search');
+    return [];
+  }
+
+  // Score each SOP by word overlap
+  const scored = registry.sops?.map(sop => {
+    const triggerText = (sop.trigger || '').toLowerCase();
+    const stepsText = (sop.fragment?.steps || '').toLowerCase();
+    const fullText = triggerText + ' ' + stepsText;
+
+    // Count matched query words
+    let matched = 0;
+    let triggerMatches = 0;
+    for (const w of queryWords) {
+      if (triggerText.includes(w)) { matched += 2; triggerMatches++; } // double weight for trigger
+      else if (stepsText.includes(w)) matched += 1;
+    }
+
+    const coverage = matched / (queryWords.length * 2); // normalize (max=2 per word)
+    const hasTriggerMatch = triggerMatches > 0;
+    return { ...sop, score: coverage, hasTriggerMatch };
+  }).filter(s => s.score > 0).sort((a, b) => {
+    // Primary: trigger match first, Secondary: score
+    if (a.hasTriggerMatch !== b.hasTriggerMatch) return b.hasTriggerMatch ? 1 : -1;
+    return b.score - a.score;
   }) || [];
 
-  if (matches.length === 0) {
+  if (scored.length === 0) {
     console.log('  No similar SOPs found');
   } else {
-    for (const m of matches.slice(0, 5)) {
+    console.log(`  Found ${scored.length} matching SOPs (showing top ${Math.min(5, scored.length)}):`);
+    console.log('');
+    for (const m of scored.slice(0, 5)) {
       const category = inferCategory(m.trigger, []);
-      console.log(`  [${m.id.slice(-8)}] ${category}`);
+      console.log(`  [${m.id.slice(-8)}] ${category}  score=${(m.score * 100).toFixed(0)}%${m.hasTriggerMatch ? ' ★' : ''}`);
       console.log(`    Trigger: ${m.trigger.slice(0, 80)}`);
       if (m.fragment?.steps) {
         console.log(`    Steps: ${m.fragment.steps.slice(0, 100)}...`);
@@ -318,7 +347,7 @@ function findSimilarTasks(query) {
     }
   }
 
-  return matches;
+  return scored;
 }
 
 // ============================================================================
