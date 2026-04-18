@@ -398,4 +398,87 @@ stack.registry.add_entity("新项目", "project")  # 添加实体
 
 ---
 
+## 工具自注册系统 v3
+
+**构建日期**: 2026-04-18
+**灵感**: Hermes Agent 的 AST-based tool discovery
+
+### 架构
+
+```
+modules/
+├── tool_discovery.py          # Python AST/regex 扫描器
+├── tool_registry_autoload.ts  # 9个自注册工具 (TypeScript)
+└── discovered_tools.json      # 运行时工具清单
+```
+
+### 自注册模式 (Hermes 风格)
+
+```typescript
+// 工具模块: import 时自动注册
+import { registerTool } from '../registry/index'
+
+registerTool({
+  name: 'Read',
+  description: 'Read file contents...',
+  category: 'filesystem',
+  riskLevel: 'low',
+  toolset: 'filesystem',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'File path' },
+    },
+    required: ['path'],
+  },
+  async execute(input, ctx) {
+    const fs = await import('fs')
+    return { success: true, output: fs.readFileSync(...) }
+  },
+})
+```
+
+### tool_discovery.py 扫描器
+
+| 特性 | 说明 |
+|------|------|
+| **JS/TS** | 正则 + 括号计数处理嵌套对象 |
+| **Python** | ast.NodeVisitor 遍历 register_tool() 调用 |
+| **注释过滤** | 移除 `//` 和 `/* */` 避免 doc example 假阳性 |
+| **字段提取** | `extract_nested_field()` 支持任意深度嵌套 |
+| **工具集** | 按 category / toolset 分组统计 |
+
+### 已发现工具 (9个)
+
+| 工具 | 类别 | 工具集 |
+|------|------|--------|
+| Read | filesystem | filesystem |
+| Write | filesystem | filesystem |
+| Edit | filesystem | filesystem |
+| Glob | filesystem | filesystem |
+| Grep | filesystem | filesystem |
+| WebFetch | network | network |
+| Bash | process | process |
+| Remember | memory | memory |
+| Recall | memory | memory |
+
+```bash
+# 扫描并生成清单
+python tool_discovery.py scan --dir modules --output discovered_tools.json
+
+# 查看清单
+python tool_discovery.py manifest --tools discovered_tools.json
+```
+
+### 与 Hermes 的差异
+
+| 特性 | Hermes Agent | OpenClaw |
+|------|-------------|----------|
+| 发现方式 | TypeScript compiler API (tSC) | Python regex + ast |
+| 注册触发 | 动态 import | 动态 import |
+| 工具 schema | 完整 TypeScript 类型 | JSON-compatible schema |
+| 执行环境 | Bun | Bun + Python (扫描器) |
+
+---
+
 *最后更新: 2026-04-18*
