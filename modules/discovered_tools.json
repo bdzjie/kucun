@@ -1,0 +1,143 @@
+{
+  "scanned_at": "2026-04-18T12:45:25.672057",
+  "directory": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules",
+  "scanned_files": 5,
+  "tools": [
+    {
+      "name": "Read",
+      "description": "Read file contents from the filesystem. Supports offset/limit for partial reads.",
+      "category": "filesystem",
+      "risk_level": "low",
+      "toolset": "filesystem",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      path: { type: 'string', description: 'Absolute or relative file path' },\n      offset: { type: 'number', description: 'Line offset to start reading (1-ind"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "4ee01c4970a92246"
+    },
+    {
+      "name": "Write",
+      "description": "Create or overwrite a file with content. Creates parent directories automatically.",
+      "category": "filesystem",
+      "risk_level": "high",
+      "toolset": "filesystem",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      path: { type: 'string', description: 'File path to write' },\n      content: { type: 'string', description: 'Content to write' },\n    },\n    required: ['pa"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "ef5b4ccbccfce762"
+    },
+    {
+      "name": "Edit",
+      "description": "Edit file with precise text replacement. Replaces first occurrence of exact text.",
+      "category": "filesystem",
+      "risk_level": "medium",
+      "toolset": "filesystem",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      path: { type: 'string', description: 'File path' },\n      find: { type: 'string', description: 'Exact text to find' },\n      replace: { type: 'string', de"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "b952b95f9f6a0f13"
+    },
+    {
+      "name": "Glob",
+      "description": "Find files matching a glob pattern (e.g., **/*.ts, src/*.js).",
+      "category": "filesystem",
+      "risk_level": "low",
+      "toolset": "filesystem",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      pattern: { type: 'string', description: 'Glob pattern (supports **, *, ?)' },\n      cwd: { type: 'string', description: 'Working directory for search' },\n"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "08f022fc667d1a1a"
+    },
+    {
+      "name": "Grep",
+      "description": "Search for text pattern in files. Returns matching lines with line numbers.",
+      "category": "filesystem",
+      "risk_level": "low",
+      "toolset": "filesystem",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      pattern: { type: 'string', description: 'Text pattern to search' },\n      path: { type: 'string', description: 'Directory or file to search in' },\n      r"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "c58db9473165db23"
+    },
+    {
+      "name": "WebFetch",
+      "description": "Fetch and extract readable content from a URL. Returns markdown or plain text.",
+      "category": "network",
+      "risk_level": "medium",
+      "toolset": "network",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      url: { type: 'string', description: 'HTTP or HTTPS URL to fetch' },\n      extractMode: { type: 'string', enum: ['markdown', 'text'], description: 'Content"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "f2ca474526400165"
+    },
+    {
+      "name": "Bash",
+      "description": "Execute shell commands. Supports PowerShell on Windows, bash on Unix.",
+      "category": "process",
+      "risk_level": "high",
+      "toolset": "process",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      command: { type: 'string', description: 'Shell command to execute' },\n      cwd: { type: 'string', description: 'Working directory' },\n      timeout: { ty"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "44ff506450335041"
+    },
+    {
+      "name": "Remember",
+      "description": "Store a memory in the temporal memory system. Classifies and stores in appropriate hall.",
+      "category": "memory",
+      "risk_level": "low",
+      "toolset": "memory",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      text: { type: 'string', description: 'Memory text to store' },\n      wing: { type: 'string', description: 'Wing: wing_user, wing_openclaw, wing_code, wing"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "d253ff24b0ec0210"
+    },
+    {
+      "name": "Recall",
+      "description": "Query the temporal memory system. Supports wing/room filtering and semantic search.",
+      "category": "memory",
+      "risk_level": "low",
+      "toolset": "memory",
+      "parameters_schema": {
+        "raw": "{\n    type: 'object',\n    properties: {\n      query: { type: 'string', description: 'Search query' },\n      wing: { type: 'string', description: 'Filter by wing' },\n      room: { type: 'string', descr"
+      },
+      "source_file": "C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\tool_registry_autoload.ts",
+      "source_line": 0,
+      "tool_id": "d9652808f49a1e07"
+    }
+  ],
+  "total_tools": 9,
+  "by_category": {
+    "filesystem": 5,
+    "network": 1,
+    "process": 1,
+    "memory": 2
+  },
+  "by_toolset": {
+    "filesystem": 5,
+    "network": 1,
+    "process": 1,
+    "memory": 2
+  },
+  "statistics": {
+    "files_scanned": 5,
+    "tools_found": 9,
+    "errors": 0
+  },
+  "errors": []
+}
