@@ -149,6 +149,14 @@ export {
   quickSave,
 } from './memory/auto_save_integration'
 
+// Auto-Save Agent (AIAgent with AutoSave wired)
+export {
+  createAutoSaveAgent,
+  createAutoSaveCallbacks,
+  migrateSessionToMemory,
+  migrateAllSessionsToMemory,
+} from './memory/auto_save_agent'
+
 // Context Module
 export {
   ContextManager,

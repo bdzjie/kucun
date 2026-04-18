@@ -28,6 +28,7 @@ import {
   DEFAULT_MEMORY_CONFIG,
   MemoryConfig,
 } from './types'
+import { PalaceSearch, getGlobalPalaceSearch, indexDrawer } from '../search/palace_search'
 
 // ============================================================================
 // In-Memory Storage (可替换为 ChromaDB/SQLite)
@@ -102,6 +103,14 @@ export async function addDrawer(
 
   // 存储
   storage.drawers.set(drawerId, drawer)
+
+  // BM25 索引 (异步，不阻塞存储)
+  try {
+    const search = getGlobalPalaceSearch()
+    indexDrawer(search, drawer)
+  } catch (error) {
+    console.warn('[Palace] BM25 indexing failed:', error)
+  }
 
   // 更新 Wing
   if (!storage.wings.has(wing)) {
@@ -254,30 +263,50 @@ export function getDrawersByRoom(wing: string, room: string, limit = 100): Drawe
 }
 
 // ============================================================================
-// Search (语义搜索 - 简化版)
+// Search (L3 Deep Search — BM25)
 // ============================================================================
 
 /**
- * 简单关键词搜索
- * 注意: 实际应使用 ChromaDB 的语义搜索
+ * L3 Deep Search using BM25
+ * Delegates to global PalaceSearch engine.
  */
 export function searchDrawers(request: SearchRequest): SearchResult[] {
+  const { query, wing, room, hall, limit = 10, threshold = 0.1 } = request
+
+  try {
+    const search = getGlobalPalaceSearch()
+
+    const hits = search.search(query, {
+      wing,
+      room,
+      hall,
+      limit,
+      threshold,
+    })
+
+    return hits.map(hit => ({
+      drawer: hit.doc as unknown as Drawer,
+      similarity: hit.score,
+      highlight: hit.snippet,
+    }))
+  } catch (error) {
+    console.warn('[Palace] BM25 search failed, falling back to keyword:', error)
+    return keywordSearchFallback(request)
+  }
+}
+
+/**
+ * Fallback keyword search when BM25 is unavailable.
+ */
+function keywordSearchFallback(request: SearchRequest): SearchResult[] {
   const { query, wing, room, hall, limit = 10, threshold = 0.3 } = request
 
   let results = Array.from(storage.drawers.values())
 
-  // 过滤器
-  if (wing) {
-    results = results.filter(d => d.wing === wing)
-  }
-  if (room) {
-    results = results.filter(d => d.room === room)
-  }
-  if (hall) {
-    results = results.filter(d => d.hall === hall)
-  }
+  if (wing) results = results.filter(d => d.wing === wing)
+  if (room) results = results.filter(d => d.room === room)
+  if (hall) results = results.filter(d => d.hall === hall)
 
-  // 简单相似度计算 (TF-IDF 简化版)
   const queryWords = query.toLowerCase().split(/\s+/)
   const scored = results.map(drawer => {
     const content = drawer.content.toLowerCase()
@@ -289,7 +318,6 @@ export function searchDrawers(request: SearchRequest): SearchResult[] {
     return { drawer, similarity }
   })
 
-  // 排序并返回
   return scored
     .filter(s => s.similarity >= threshold)
     .sort((a, b) => b.similarity - a.similarity)
