@@ -307,4 +307,95 @@ Claude Code 的设计亮点：
 
 ---
 
+## OpenClaw 记忆系统 v2 — 已实现
+
+**实现日期**: 2026-04-18
+**模块位置**: `memory/memory_system.py` (~790行)
+
+### 核心组件
+
+| 组件 | 文件 | 功能 |
+|------|------|------|
+| MemoryStack | `memory_system.py` | 统一入口，4层栈 |
+| TemporalMemoryStore | `memory_system.py` | 时序记忆存储（Wing/Room/Hall） |
+| EntityRegistry | `memory_system.py` | 实体注册表 |
+| HallType | `memory_system.py` | 5类→Hall映射 |
+| 5类分类器 | `classifier.py` | decision/preference/milestone/problem/emotional |
+| WAL审计 | `wal.py` | 写入前置日志 |
+
+### 数据存储（~/.openclaw/memory/）
+
+| 文件 | 内容 |
+|------|------|
+| `identity.json` | L0身份（name/role/personality/用户偏好） |
+| `entity_registry.json` | 实体注册表（person/project/concept） |
+| `memories.jsonl` | 时序记忆（append-only） |
+| `config.json` | 配置 |
+
+### 4层记忆栈
+
+| 层级 | Token | 内容 |
+|------|-------|------|
+| L0 Identity | ~28 | 身份+用户+角色 |
+| L1 Essential | ~272 | Wing/Room分类的关键记忆 |
+| L2 On-Demand | ~200-500/次 | 按wing/room过滤检索 |
+| L3 Deep | 无限制 | 全量搜索（当前L2过滤） |
+
+**Wake-up成本**: ~300 tokens（当前）
+
+### Wing/Room 结构
+
+```
+wing_user       → preferences, projects, decisions, context
+wing_openclaw   → architecture, tools, memory, skills, config
+wing_code       → architecture, keybindings, lsp, commands, hooks
+wing_mempalace → palace, knowledge_graph, layers, extractor, entity
+```
+
+### Hall 类型（5类记忆）
+
+```
+hall_facts       ← decision 类型
+hall_events      ← milestone/problem/emotional 类型
+hall_discoveries ← 突破性洞察
+hall_preferences ← preference 类型
+hall_advice      ← 建议和解决方案
+```
+
+### Temporal 记忆特性
+
+```python
+# 支持时间旅行查询
+query(as_of="2026-03-15")  # 查询当时有效的记忆
+
+# 支持替代机制
+supersede(old_entry_id, new_entry_id)  # 标记旧记忆被替代
+valid_from / valid_to  # 时间窗口
+```
+
+### 实体注册表
+
+```json
+{
+  "Administrator": {"type": "person", "confidence": 1.0, "relationship": "雇主"},
+  "Claude Code": {"type": "project", "confidence": 1.0},
+  "MemPalace": {"type": "project", "confidence": 1.0},
+  "Hermes Agent": {"type": "project", "confidence": 1.0}
+}
+```
+
+### 使用方式
+
+```python
+from memory.memory_system import get_stack
+
+stack = get_stack()
+stack.remember("用户偏好Markdown格式")  # 自动分类+存储
+stack.wake_up()     # L0+L1 唤醒文本
+stack.recall(wing='wing_code')  # 检索代码分析记忆
+stack.registry.add_entity("新项目", "project")  # 添加实体
+```
+
+---
+
 *最后更新: 2026-04-18*

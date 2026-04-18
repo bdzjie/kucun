@@ -272,99 +272,87 @@ function listTools(): Tool[] {
 
 ---
 
-## 九、记忆系统设计（基于 MemPalace + Claude Code）
+## 九、记忆系统实现（基于 MemPalace + Claude Code）
 
-### 9.1 记忆结构（Wing/Room）
+### 9.1 已实现：统一记忆系统
+
+**模块**: `memory/memory_system.py` (~790行)
+**存储**: `~/.openclaw/memory/`
 
 ```
-Wing（翼）  — 项目/人分类（如 wing_claude-code / wing_mempalace）
-  └── Room（房间）— 具体话题（如 architecture / memory-system / tools）
+┌─────────────────────────────────────────────────────────────┐
+│                     MemoryStack                              │
+│  ┌─────────┐ ┌──────────────┐ ┌────────────────┐           │
+│  │ L0/L1   │ │ L2 On-Demand │ │ L3 Deep Search │           │
+│  │ Identity│ │ Wing/Room    │ │  (future)      │           │
+│  │ ~300t   │ │ ~200-500t/次  │ │                │           │
+│  └────┬────┘ └──────┬───────┘ └───────┬────────┘           │
+│       │             │                │                      │
+│       └─────────────┼────────────────┘                      │
+│                     ▼                                       │
+│  ┌─────────────────────────────────────────┐               │
+│  │        TemporalMemoryStore              │               │
+│  │  Wing → Room → Hall → MemoryEntry      │               │
+│  │  (valid_from/to, supersede)            │               │
+│  └────────────────────┬──────────────────┘               │
+│                       ▼                                    │
+│  ┌────────────┐ ┌──────────┐ ┌──────────────┐          │
+│  │ memories.  │ │ identity │ │ entity_      │          │
+│  │ jsonl      │ │ .json    │ │ registry.json│          │
+│  └────────────┘ └──────────┘ └──────────────┘          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 记忆结构（Wing/Room/Hall）
+
+```
+Wing（翼）  — 项目/人分类
+  └── Room（房间）— 具体话题
         └── Hall（走廊）— 记忆类型
-              hall_facts       — 决定的事实
-              hall_events     — 会议/里程碑/调试
-              hall_discoveries — 突破、新洞察
-              hall_preferences — 习惯、偏好、约定
-              hall_advice     — 建议和解决方案
+              hall_facts       ← decision
+              hall_events     ← milestone/problem/emotional
+              hall_discoveries ← 突破洞察
+              hall_preferences ← preference
+              hall_advice     ← 建议
 ```
 
-### 9.2 5类记忆分类
+### 9.3 5类记忆分类
 
 | 类型 | 标记数量 | 典型模式 |
 |------|---------|---------|
 | DECISION | 22 | "decided to..." "because..." "instead of..." |
 | PREFERENCE | 24 | "I prefer..." "always use..." "never do..." |
-| MILESTONE | 35 | "it works!" "finally!" "first time..." "built..." |
-| PROBLEM | 24 | "bug" "doesn't work" "root cause" "fixed by..." |
-| EMOTIONAL | 27+ | "I feel..." "proud" "worried" "love..." |
+| MILESTONE | 35 | "it works!" "finally!" "first time..." |
+| PROBLEM | 24 | "bug" "doesn't work" "root cause" |
+| EMOTIONAL | 27+ | "I feel..." "proud" "worried" |
 
-分类器位置: `memory/classifier.py`
+### 9.4 Temporal 记忆特性
 
-### 9.3 WAL 审计日志
+| 字段 | 说明 |
+|------|------|
+| `valid_from` | 记忆生效时间 |
+| `valid_to` | 记忆失效时间（null=当前有效）|
+| `superseded_by` | 被新记忆替代 |
+| `is_current(as_of)` | 检查某时间点是否有效 |
 
-```python
-# 每次写入前先落 WAL
-WAL_DIR = ~/.openclaw/wal/
-WAL_FILE = write_log.jsonl
+### 9.5 实体注册表
 
-# 格式
-{
-  "timestamp": "2026-04-18T07:53:00",
-  "operation": "write",
-  "file_path": "memory/2026-04-18.md",
-  "content_hash": "sha256...",
-  "lines_delta": +15,
-  "metadata": {"agent": "main", "channel": "webchat"}
-}
-```
+| 字段 | 说明 |
+|------|------|
+| `name` | 实体名称 |
+| `type` | person/project/concept |
+| `confidence` | 置信度（0-1）|
+| `source` | onboarding/learned/wikipedia |
+| `aliases` | 别名列表 |
+| `ambiguous_flags` | 歧义词标志（max/will/grace）|
 
-WAL 功能:
-- 审计追溯（谁在什么时候写了什么）
-- 记忆污染检测（异常写入模式）
-- 外部写入回滚
+### 9.6 WAL 审计
 
-### 9.4 Temporal Memory（时间戳记忆）
+**位置**: `~/.openclaw/wal/write_log.jsonl`
 
 ```python
-# 记忆带时间戳
-{
-  "content": "决定使用 PostgreSQL",
-  "created_at": "2026-04-01",
-  "valid_from": "2026-04-01",    # 事实生效时间
-  "valid_to": null,               # null = 当前有效
-  "superseded_by": null,          # 被新决定替代
-}
-
-# 查询特定时间点的事实
-query_memories(as_of="2026-03-15")  # 当时有效的记忆
-```
-
-### 9.5 4层记忆栈（设计）
-
-| 层级 | Token 估算 | 加载时机 | 内容 |
-|------|----------|---------|------|
-| **L0** | ~50 | 始终 | AI 身份（who am I） |
-| **L1** | ~120 | 始终 | 关键事实（团队、项目、偏好） |
-| **L2** | ~500/次 | 按需 | 近期 Room 记忆 |
-| **L3** | 无限制 | 按需 | 全量语义搜索 |
-
-Wake-up 成本: L0 + L1 ≈ 170 tokens
-
-### 9.6 实体注册表（设计）
-
-```python
-# ~/.openclaw/entity_registry.json
-{
-  "people": {
-    "Administrator": {
-      "source": "onboarding",
-      "confidence": 1.0,
-      "contexts": ["main-user"],
-      "relationship": "boss",
-    }
-  },
-  "projects": ["Claude-Code-Analysis", "Mempalace-Study"],
-  "ambiguous_flags": ["max", "will", "grace"],
-}
+log_write(operation="add_memory", file_path="wing_code/architecture",
+          metadata={"hall": "hall_facts", "entry_id": "mem_..."})
 ```
 
 ---
