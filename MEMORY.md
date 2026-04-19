@@ -756,4 +756,127 @@ store.appendMessage({ sessionId: 's1', role: 'user', content: 'Hello' })
 
 ---
 
-*最后更新: 2026-04-18*
+## SQLite FTS5 — Hermes 风格会话全文搜索
+
+**构建日期**: 2026-04-19
+**文件**: `modules/search/sqlite_fts5.py` (~500行)
+
+### 架构
+
+```
+Python sqlite3 FTS5 (Porter stemmer + Unicode61 tokenizer)
+├── BM25 排名算法 (k1=1.5, b=0.75)
+├── 会话摘要表 (session_summaries)
+├── BM25 统计缓存表
+└── CLI bridge (index/search/summary/stats/list)
+
+JS bridge: modules/search/sqlite_fts5.js
+Cron集成: scripts/memory_cron.mjs (每6小时重建索引)
+```
+
+### CLI 用法
+
+```bash
+# 索引所有会话
+python modules/search/sqlite_fts5_bridge.py index [sessions_dir] [db_path]
+
+# 搜索
+python modules/search/sqlite_fts5_bridge.py search "memory hook" [db_path] [limit]
+
+# 会话摘要
+python modules/search/sqlite_fts5_bridge.py summary <session_id> [db_path]
+
+# 统计
+python modules/search/sqlite_fts5_bridge.py stats [db_path]
+
+# 列出已索引会话
+python modules/search/sqlite_fts5_bridge.py list [db_path]
+```
+
+### 索引统计
+
+| 指标 | 值 |
+|------|-----|
+| 已索引会话 | 2 |
+| 已索引消息 | 190 |
+| 数据库路径 | `~/.openclaw/memory/fts5.db` |
+| 索引更新 | 每6小时 (memory_cron.mjs) |
+
+### BM25 搜索结果示例
+
+```json
+[{"session_id": "4f6f0d6c...", "role": "assistant",
+  "content": "查看 hooks 配置确认 memory_hook 注册状态：",
+  "score": 1.733, "snippet": "..."}]
+```
+
+### 与 palace_search.ts 的关系
+
+| 特性 | palace_search.ts (L3) | sqlite_fts5.py (Session) |
+|------|---------------------|-------------------------|
+| 数据源 | Memory Palace drawers | Session .jsonl 文件 |
+| 索引时机 | 记忆存储时 | 定时 (每6h) |
+| 算法 | BM25 (JS) | BM25 (SQLite FTS5) |
+| 搜索范围 | 长期记忆 | 会话历史 |
+
+---
+
+## Hermes Auto Skill Creator
+
+**构建日期**: 2026-04-19
+**文件**: `modules/auto_skill_creator.py` (~450行)
+
+### 核心功能
+
+自动从使用模式中创建技能。检测3类模式：
+
+| 模式 | 触发条件 | 置信度 |
+|------|---------|--------|
+| repeat_task | 同一任务执行 3+ 次 | 0.5 + count*0.1 |
+| preference | 用户明确说明的习惯 | 0.8 |
+| tool_chain | 同一工具链 5+ 次使用 | 0.4 + count*0.05 |
+
+### 检测流程
+
+```
+detect_repeat_tasks()    → 从 memories.jsonl 检测重复任务哈希
+detect_preferences()     → 从记忆检测偏好关键词 (prefer/always/不要/记住)
+detect_tool_chains()     → 从会话 .jsonl 检测高频工具序列
+        ↓
+generate_skill_name()   → 从内容提取关键词生成技能名
+create_skill()           → 生成 SKILL.md + handler.js + HOOK.md
+_register_skill()         → 写入 skill_registry.json
+```
+
+### 已创建技能
+
+| 技能名 | 触发 | 置信度 | 创建时间 |
+|--------|------|--------|---------|
+| `pref_61e6a00a` | 用户偏好 Markdown 格式输出 | 80% | 2026-04-19 |
+
+### 用法
+
+```bash
+# 手动运行
+python modules/auto_skill_creator.py
+
+# 输出示例
+[auto_skill] Checking for repeat tasks...
+[auto_skill] Checking for preferences...
+[auto_skill] Checking for tool chains...
+[auto_skill] Created: pref_61e6a00a (confidence: 80%)
+{"candidates_found": 1, "skills_created": 1, "created_skills": ["pref_61e6a00a"]}
+```
+
+### 生成的技能结构
+
+```
+skills/pref_61e6a00a/
+├── SKILL.md     # 描述、触发模式、证据
+├── handler.js   # 导出默认 async 函数
+└── HOOK.md      # OpenClaw hook 元数据 (autoCreated: true)
+```
+
+---
+
+*最后更新: 2026-04-19*
