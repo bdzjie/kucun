@@ -39,7 +39,7 @@ MIN_REPEAT_COUNT = 3
 MIN_TOOL_CHAIN_COUNT = 5
 
 # ============================================================================
-# Constraint System — Evolver-inspired safety checks
+# Constraint System — Evolver + hermes-agent-self-evolution inspired safety checks
 # ============================================================================
 
 FORBIDDEN_SKILL_NAMES = {
@@ -54,6 +54,67 @@ FORBIDDEN_PATH_PATTERNS = [
     '/System32/', '\\System32\\', '/Windows/', '\\Windows\\',
     '/usr/bin/', '\\usr\\bin\\', '/bin/', '\\bin\\',
 ]
+
+# hermes-agent-self-evolution style constraints
+MAX_SKILL_SIZE = 15_000       # 15KB per skill
+MAX_TOOL_DESC_SIZE = 500      # chars
+MAX_PROMPT_GROWTH = 0.20      # 20% max growth over baseline
+MAX_SKILL_NAME_LEN = 64       # chars
+MIN_SKILL_NAME_LEN = 3       # chars
+
+# Validation commands for hermes-agent-self-evolution style Gene validation
+SKILL_VALIDATION_COMMANDS = [
+    'node --version', 'npm --version',
+]
+
+
+def validate_skill_content(skill_md: str, baseline_md: str = '') -> tuple[bool, str, dict]:
+    """
+    hermes-agent-self-evolution style constraint validation for skill content.
+    Checks size, growth, and structural integrity.
+    
+    Returns (passed, reason, details_dict).
+    """
+    details = {'size': len(skill_md), 'limit': MAX_SKILL_SIZE}
+    
+    # 1. Size limit check
+    if len(skill_md) > MAX_SKILL_SIZE:
+        return False, f'Skill size {len(skill_md)} exceeds limit {MAX_SKILL_SIZE}', details
+    
+    # 2. Growth limit check (if baseline provided)
+    if baseline_md:
+        growth = (len(skill_md) - len(baseline_md)) / max(1, len(baseline_md))
+        details['growth'] = growth
+        if growth > MAX_PROMPT_GROWTH:
+            return False, f'Growth {growth:.1%} exceeds limit {MAX_PROMPT_GROWTH:.1%}', details
+    
+    # 3. Non-empty check
+    if not skill_md.strip():
+        return False, 'Skill content is empty', details
+    
+    # 4. Skill structure check (YAML frontmatter + name + description)
+    has_frontmatter = skill_md.strip().startswith('---')
+    if has_frontmatter:
+        end_idx = skill_md.index('---', 3)
+        if end_idx > 0:
+            frontmatter = skill_md[3:end_idx]
+            has_name = bool(__import__('re').search(r'name:\s*\S+', frontmatter))
+            has_desc = bool(__import__('re').search(r'description:\s*.+', frontmatter))
+            details['has_frontmatter'] = True
+            details['has_name'] = has_name
+            details['has_description'] = has_desc
+            if not has_name or not has_desc:
+                missing = []
+                if not has_name: missing.append('name')
+                if not has_desc: missing.append('description')
+                return False, f'Missing frontmatter fields: {", ".join(missing)}', details
+        else:
+            details['has_frontmatter'] = False
+    else:
+        details['has_frontmatter'] = False
+    
+    return True, 'OK', details
+
 
 def validate_constraint(skill_name: str) -> tuple[bool, str]:
     """
@@ -511,6 +572,20 @@ Auto-generated skill handler. Modify `handler.js` to customize behavior.
 
 {evidence_lines}
 """
+
+    # hermes-agent-self-evolution style: Validate skill content before saving
+    content_ok, content_reason, content_details = validate_skill_content(skill_md)
+    if not content_ok:
+        print(f'[auto_skill] Skill content validation failed: {content_reason}', flush=True)
+        log_evolution_event(
+            gene_id='gene_auto_skill_creator',
+            intent=candidate.pattern_type,
+            strategy=f'content_validation: {content_reason}',
+            result='constraint_failed',
+            skill_name=candidate.skill_name,
+            validation_output=json.dumps(content_details),
+        )
+        return False
 
     with open(os.path.join(skill_path, 'SKILL.md'), 'w', encoding='utf-8') as f:
         f.write(skill_md)
