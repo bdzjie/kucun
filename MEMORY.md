@@ -982,4 +982,35 @@ Agent 调用 `/session-search <query>` → Bash tool 执行 `node -e "import(...
 
 ---
 
-*最后更新: 2026-04-19*
+*最后更新: 2026-04-20*
+
+---
+
+## CAP 框架重构（2026-04-20）
+
+基于 T0 学习文档，将 AGENTS.md 从松散结构重构为 CAP 四层：
+
+| 层级 | 英文 | 核心内容 |
+|------|------|---------|
+| C | Context + Character | 身份/用户/背景/L0 Identity |
+| A | Ability + Action | 工具集/29个Skills/行动原则 |
+| P | Policy + Protection | 红线/安全机制/群组行为 |
+| O | Output + Optimization | Markdown规范/自我进化机制 |
+
+**Skills 安全审计**：29个skills全部通过，无恶意模式
+- 危险模式扫描：child_process/exec/eval/curl|iex/subprocess 均为正常功能
+- 无 typosquatting
+- 无外部URL抓取
+- 无隐藏下载
+
+**HEARTBEAT SOP 强化**：轮换检查清单 + 状态追踪
+- 7项检查按间隔执行（2h-72h），不全部执行
+- 主动执行无需询问（记忆维护/git/文档更新）
+- 状态文件：`memory/heartbeat-state.json`
+
+**统一记忆系统**：`modules/knowledge/memory_integration.mjs`
+- 单例入口，整合13个knowledge模块
+- 数据流：Query → RAG → Graph → Provenance → Ebbinghaus → Core → Feedback
+- 新增skill：`memory-assistant` CLI接口
+
+**Skills 总数：30**（+ memory-assistant）
