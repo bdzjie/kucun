@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { setInterval, setTimeout } from 'node:timers';
+import { execFileSync } from 'node:child_process';
 
 const $require = createRequire(import.meta.url);
 
@@ -34,6 +35,7 @@ const IS_ONCE = args.includes('--once');
 // Schedule intervals
 const L4_ARCHIVE_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const SOP_CHECK_INTERVAL_MS = 60 * 60 * 1000;        // 1 hour
+const FTS5_INDEX_INTERVAL_MS = 6 * 60 * 60 * 1000;   // 6 hours
 
 // ============================================================================
 // File Helpers
@@ -75,6 +77,7 @@ function getCronState() {
   return readJson(CRON_STATE_FILE, {
     lastL4Archive: null,
     lastSopCheck: null,
+    lastFts5Index: null,
     archiverVersion: 1,
   });
 }
@@ -259,7 +262,52 @@ function tick() {
     }
   }
 
+  // FTS5 Index check
+  const fts5Due = !state.lastFts5Index || (now - state.lastFts5Index) >= FTS5_INDEX_INTERVAL_MS;
+  if (fts5Due) {
+    console.log(`[cron/fts5] Building FTS5 index (last: ${state.lastFts5Index ? new Date(state.lastFts5Index).toISOString() : 'never'})`);
+    try {
+      runFts5Index();
+      state.lastFts5Index = now;
+      changed = true;
+    } catch (e) {
+      console.error(`[cron/fts5] Error: ${e.message}`);
+    }
+  }
+
   if (changed) setCronState(state);
+}
+
+// ============================================================================
+// FTS5 Indexer — Hermes SQLite FTS5 Session Search
+// ============================================================================
+
+function runFts5Index() {
+  // Compute script path relative to workspace root
+  const workspaceRoot = STATE_DIR.replace(/\\/g, '/');
+  const bridgeScript = workspaceRoot + '/workspace/modules/search/sqlite_fts5_bridge.py';
+  const sessionsDir = STATE_DIR + '/agents/main/sessions';
+  const dbPath = MEMORY_DIR + '/fts5.db';
+
+  try {
+    const result = execFileSync('python', [bridgeScript, 'index', sessionsDir, dbPath], {
+      encoding: 'utf8',
+      timeout: 60000,
+    });
+    const data = JSON.parse(result.trim());
+    console.log(`[cron/fts5] Indexed ${data.indexed_sessions} sessions — ${data.stats?.total_messages || 0} messages in DB`);
+  } catch (e) {
+    // Fallback via shell
+    try {
+      const { execSync } = $require('node:child_process');
+      const pyCmd = `python "${bridgeScript}" index "${sessionsDir}" "${dbPath}"`;
+      const output = execSync(pyCmd, { encoding: 'utf8', timeout: 60000 });
+      const data = JSON.parse(output.trim());
+      console.log(`[cron/fts5] Indexed ${data.indexed_sessions} sessions — ${data.stats?.total_messages || 0} messages`);
+    } catch (e2) {
+      throw new Error(`FTS5 index failed: ${e2.message.slice(0, 100)}`);
+    }
+  }
 }
 
 // ============================================================================
