@@ -6,16 +6,42 @@
  * Based on: SwarmVault (LLM Wiki) + agent-second-brain (Ebbinghaus)
  */
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname, homedir } from 'path';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { homedir } from 'os';
 import { fileURLToPath } from 'url';
 
-// ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load modules
-function loadModule(path) {
+// Debug: log vault path
+function getDefaultVault() {
+  const docPath = join(homedir(), 'Documents');
+  const candidates = [
+    join(docPath, 'Obsidian Vault'),
+    join(docPath, 'Obsidian'),
+    join(docPath, 'vault'),
+    docPath,
+    join(homedir(), 'Obsidian Vault'),
+    join(homedir(), 'obsidian-vault'),
+  ];
+  
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      const obsidianConfig = join(path, '.obsidian');
+      let hasMdFiles = false;
+      try {
+        hasMdFiles = readdirSync(path).some(f => f.endsWith('.md'));
+      } catch (e) {}
+      if (existsSync(obsidianConfig) || hasMdFiles) {
+        return path;
+      }
+    }
+  }
+  return docPath;
+}
+
+async function loadModule(path) {
   return import(path).then(m => m);
 }
 
@@ -50,6 +76,7 @@ async function main() {
   }
   
   const cmd = positional[0];
+  const vaultPath = flags.path || getDefaultVault();
   
   // Import modules
   let ObsidianSync, VaultHealth, KnowledgeGraph, EbbinghausMemory;
@@ -68,14 +95,7 @@ async function main() {
     EbbinghausMemory = memoryModule.EbbinghausMemory;
   } catch (e) {
     console.error('Failed to load modules:', e.message);
-    
-    // Fallback: provide helpful error message
-    const modulePaths = [
-      './modules/knowledge/obsidian_sync.mjs',
-      './modules/knowledge/vault_health.mjs', 
-      './modules/knowledge/knowledge_graph.mjs',
-      './modules/knowledge/ebbinghaus_memory.mjs',
-    ];
+    console.error(e.stack);
     
     console.log('\n=== Obsidian Knowledge Base ===\n');
     console.log('Status: Modules not found in current directory.');
@@ -94,8 +114,6 @@ async function main() {
   
   // Execute command
   try {
-    const vaultPath = flags.path || join(homedir(), 'Documents', 'Obsidian Vault');
-    
     if (cmd === 'scan' || flags.scan) {
       console.log('\n=== Obsidian Vault Scan ===\n');
       
@@ -156,6 +174,7 @@ async function main() {
       sync.scan();
       const stats = sync.getStats();
       
+      console.log(`Vault: ${vaultPath}`);
       console.log(`Total Notes: ${stats.totalNotes}`);
       console.log(`Total Tags: ${stats.totalTags}`);
       console.log(`Orphan Notes: ${stats.orphanNotes}`);
@@ -165,7 +184,6 @@ async function main() {
     } else if (cmd === 'export-memories' || flags.exportMemories) {
       console.log('\n=== Export Memories to Vault ===\n');
       
-      // Load memories from Ebbinghaus system
       const mem = new EbbinghausMemory();
       const memories = mem.memories || [];
       
@@ -269,7 +287,6 @@ async function main() {
       const kg = new KnowledgeGraph();
       const depth = flags.depth || 2;
       
-      // Find connected notes
       const noteId = note.name.toLowerCase().replace(/\s+/g, '-');
       const connected = kg.findConnected({ 
         nodes: sync.notes.map(n => ({ id: n.name.toLowerCase(), name: n.name, type: 'note' })),

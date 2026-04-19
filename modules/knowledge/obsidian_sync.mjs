@@ -32,8 +32,36 @@ import { homedir } from 'os';
  * @property {string[]} errors
  */
 
-// Default vault path
-const DEFAULT_VAULT = join(homedir(), 'Documents', 'Obsidian Vault');
+// Default vault path — auto-detect Obsidian vault location
+function getDefaultObsidianVault() {
+  const docPath = join(homedir(), 'Documents');
+  
+  // Common Obsidian vault locations
+  const candidates = [
+    join(docPath, 'Obsidian Vault'),
+    join(docPath, 'Obsidian'),
+    join(docPath, 'vault'),
+    docPath, // The Documents folder itself might be the vault
+    join(homedir(), 'Obsidian Vault'),
+    join(homedir(), 'obsidian-vault'),
+  ];
+  
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      // Check if it looks like an Obsidian vault (has .obsidian folder or .md files)
+      const obsidianConfig = join(path, '.obsidian');
+      const hasMdFiles = readdirSync(path).some(f => f.endsWith('.md'));
+      
+      if (existsSync(obsidianConfig) || hasMdFiles) {
+        return path;
+      }
+    }
+  }
+  
+  return docPath; // Fallback to Documents
+}
+
+const DEFAULT_VAULT = getDefaultObsidianVault();
 const SYNC_STATE_FILE = join(homedir(), '.openclaw', 'memory', 'obsidian_sync_state.json');
 
 /**
