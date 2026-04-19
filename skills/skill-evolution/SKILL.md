@@ -2,12 +2,15 @@
 
 进化 OpenClaw skills 使其更好。
 
-使用 GEPA-style 优化循环 + LLM-as-Judge 评估，自动改进 skills。
+支持两种进化模式:
+- **GEPA** (Genetic Expression Programming) — 生成多个变体，选择最佳
+- **Ralph Wiggum** — 自引用循环，在同一 skill 上反复迭代改进
 
 ## Usage
 
 ```
 /skill-evolution --evolve [skill-name] [--iterations N] [--population N]
+/skill-evolution --ralph [skill-name]
 /skill-evolution --status [skill-name]
 /skill-evolution --list
 /skill-evolution --report [skill-name]
@@ -15,7 +18,8 @@
 
 ## Commands
 
-- `--evolve [name]` — Run evolution optimization on a skill
+- `--evolve [name]` — Run GEPA evolution (generates variants, selects best)
+- `--ralph [name]` — Run Ralph Wiggum self-referential loop
 - `--status [name]` — Show evolution status and latest scores
 - `--list` — List all skills with evolution history
 - `--report [name]` — Show detailed evolution report
@@ -27,23 +31,36 @@
 ```
 /skill-evolution --list
 /skill-evolution --evolve session-search --iterations 5
+/skill-evolution --ralph session-search
 /skill-evolution --status session-search
 /skill-evolution --report session-search
 /skill-evolution --dataset conversation-analyst
-/skill-evolution --dry-run windows-gui
+```
+
+## Ralph Wiggum Mode
+
+Inspired by `anthropics/claude-code/plugins/ralph-wiggum`:
+
+> "Claude works on the same task repeatedly, seeing its previous work, until completion."
+
+Unlike GEPA (generates N variants → picks best), Ralph Wiggum:
+1. **Analyzes** current skill text, finds weaknesses
+2. **Improves** with targeted changes (expand/condense/restructure)
+3. **Reviews** quality improvement
+4. **Loops** back on SAME skill until done or max iterations
+5. **Stores** best version from history
+
+```
+Ralph Wiggum iterations: 3
+Quality Before: 0.650
+Quality After:  0.820
+Improvement:    +0.170
 ```
 
 ## Options
 
 - `--iterations N` — Number of optimization iterations (default: 3)
 - `--population N` — Number of variants per generation (default: 5)
-
-## How It Works
-
-1. **Generate eval dataset** — Creates train/val/holdout test cases from skill text
-2. **Run GEPA loop** — Generates variants, evaluates fitness, selects best
-3. **Constraint validation** — Each variant must pass size/growth/structure checks
-4. **Output report** — Shows baseline vs evolved comparison
 
 ## Architecture
 
@@ -54,15 +71,19 @@ modules/evolution/
 ├── dataset_builder.mjs       # Synthetic test case generation
 ├── fitness_evaluator.mjs     # LLM-as-Judge scoring
 ├── skill_mutator.mjs         # Genetic mutation operations
-└── skill_optimizer.mjs       # GEPA optimization loop
+├── skill_optimizer.mjs       # GEPA optimization loop
+└── ralph_wiggum_loop.mjs     # Self-referential iterative improvement
 ```
 
 ## Output
 
-Evolution outputs are stored at:
+Evolution outputs stored at:
 `~/.openclaw/memory/evolution/output/[skill-name]/[timestamp]/`
 
 Files:
 - `evolved_skill.md` — Best evolved variant
 - `baseline_skill.md` — Original skill
 - `metrics.json` — Scores, generations, dataset stats
+
+Ralph Wiggum sessions stored at:
+`~/.openclaw/memory/evolution/ralph_wiggum/`

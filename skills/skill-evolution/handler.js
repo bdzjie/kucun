@@ -287,6 +287,79 @@ export default async function handler(args) {
     }
   }
   
+  // Ralph Wiggum self-referential loop
+  if (flags.includes('--ralph') || positional[0] === 'ralph') {
+    const skillName = flags.includes('--ralph') ? (positional[0] || null) : (positional[1] || null);
+    
+    if (!skillName) {
+      return { output: 'Usage: /skill-evolution --ralph [skill-name]' };
+    }
+    
+    const skill = loadSkill(skillName);
+    if (!skill) {
+      return { output: `Skill not found: ${skillName}` };
+    }
+    
+    // Run Ralph Wiggum via node
+    try {
+      const script = `
+        import { runRalphWiggumLoop, applyToSkill } from './modules/evolution/ralph_wiggum_loop.mjs';
+        
+        const result = await runRalphWiggumLoop('${skillName}', {
+          maxIterations: 3,
+          minQualityThreshold: 0.8,
+        });
+        
+        if (result.success) {
+          const applied = await applyToSkill(result.state.skillName);
+          console.log(JSON.stringify({...result, applied: {
+            skillPath: applied.skillPath,
+            bestIteration: applied.bestVersion.iteration,
+            bestScore: applied.bestVersion.score,
+          }}));
+        } else {
+          console.log(JSON.stringify(result));
+        }
+      `;
+      
+      const output = execSync(`node --input-type=module -e "${script.replace(/"/g, '\"')}"`, {
+        cwd: WORKSPACE,
+        encoding: 'utf-8',
+        timeout: 120000,
+      });
+      
+      let result;
+      try {
+        result = JSON.parse(output);
+      } catch (e) {
+        return { output: `Ralph Wiggum ran but output parse failed: ${e.message}` };
+      }
+      
+      if (result.success) {
+        return {
+          output: `Ralph Wiggum Loop Complete: ${skillName}
+
+Iterations: ${result.iterations}
+Quality Before: ${(result.state.qualityScores?.[0] || 0).toFixed(3)}
+Quality After:  ${result.bestVersion?.score?.toFixed(3) || 'N/A'}
+Improvement:   ${result.bestVersion?.score > 0 ? '+' : ''}${(result.bestVersion?.score - (result.state.qualityScores?.[0] || 0)).toFixed(3) || 'N/A'}
+
+Applied to: skills/${skillName}/SKILL.md
+Session: ${result.sessionId}
+
+Ralph Wiggum: "I am my own critic. I work on the same task repeatedly, seeing my previous work, until completion."`
+        };
+      } else {
+        return { output: `Ralph Wiggum: ${result.reason || 'No improvement found'}` };
+      }
+    } catch (e) {
+      return { 
+        output: `Ralph Wiggum error: ${e.message}\n\n` +
+                `Note: Ralph Wiggum self-referential loops require the skill to have sufficient content to iterate on.`
+      };
+    }
+  }
+  
   // Default help
   return {
     output: `Skill Evolution — GEPA-style skill optimization
@@ -295,21 +368,30 @@ Usage:
   /skill-evolution --list                     List all skills with evolution status
   /skill-evolution --status [name]            Show evolution status
   /skill-evolution --report [name]            Show detailed report
-  /skill-evolution --evolve [name]            Run evolution
+  /skill-evolution --evolve [name]            Run GEPA evolution
   /skill-evolution --evolve [name] --dry-run  Show what would happen
+  /skill-evolution --ralph [name]             Ralph Wiggum self-referential loop
   /skill-evolution --dataset [name]           Generate evaluation dataset
 
 Options:
   --iterations N    Number of optimization iterations (default: 3)
   --population N     Variants per generation (default: 5)
 
-Evolution System:
-  modules/evolution/
-  ├── skill_optimizer.mjs     # GEPA optimization loop
-  ├── constraint_validator.mjs # Constraint validation
-  ├── fitness_evaluator.mjs    # LLM-as-Judge scoring
-  ├── dataset_builder.mjs      # Synthetic test generation
-  └── skill_mutator.mjs        # Genetic mutations
+Evolution Systems:
+  GEPA (Genetic Expression Programming):
+    skill_optimizer.mjs + skill_mutator.mjs + fitness_evaluator.mjs
+  
+  Ralph Wiggum (Self-Referential):
+    ralph_wiggum_loop.mjs — Claude works on the same task repeatedly
+    Inspired by: anthropics/claude-code/plugins/ralph-wiggum
+
+Ralph Wiggum Mode:
+  Unlike GEPA (generates variants → selects best), Ralph Wiggum:
+  1. Analyzes current skill text
+  2. Generates targeted improvements
+  3. Reviews quality
+  4. Loops back on SAME skill until done or max iterations
+  5. Stores best version from history
 
 Output:
   ~/.openclaw/memory/evolution/output/[skill-name]/[timestamp]/

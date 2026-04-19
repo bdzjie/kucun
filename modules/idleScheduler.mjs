@@ -135,6 +135,7 @@ export function getScheduleRecommendation() {
     sleep_multiplier,
     should_distill,
     should_explore,
+    should_self_improve: idle_min >= 30 && state.idle_episodes > 2,
     reason,
   };
 }
@@ -240,6 +241,137 @@ export async function exploreSignals() {
 /**
  * Get idle stats
  */
+/**
+ * Ralph Wiggum Self-Referential Loop Integration
+ * During aggressive idle, trigger self-improvement on skills
+ */
+
+const WORKSPACE = join(process.env.APPDATA || '', '.openclaw', 'workspace');
+const SKILLS_DIR = join(WORKSPACE, 'skills');
+const RALPH_WIGGUM_COOLDOWN = 3 * 24 * 60 * 60 * 1000; // 3 days between self-improvements per skill
+
+let _ralphWiggumModule = null;
+
+async function getRalphWiggumModule() {
+  if (_ralphWiggumModule) return _ralphWiggumModule;
+  try {
+    const mod = await import('./evolution/ralph_wiggum_loop.mjs');
+    _ralphWiggumModule = mod;
+    return mod;
+  } catch (e) {
+    console.warn('[OMLS] Ralph Wiggum module not available:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Select which skill to self-improve
+ * Strategy: pick the most complex skill that hasn't been self-improved recently
+ */
+async function selectSkillForSelfImprovement() {
+  try {
+    if (!existsSync(SKILLS_DIR)) return null;
+    
+    const cooldownPath = join(process.env.APPDATA || '', '.openclaw', 'memory', 'evolution', 'ralph_wiggum', 'cooldown.json');
+    let cooldown = {};
+    if (existsSync(cooldownPath)) {
+      cooldown = JSON.parse(readFileSync(cooldownPath, 'utf-8'));
+    }
+    
+    const now = Date.now();
+    const candidates = [];
+    
+    for (const skill of readdirSync(SKILLS_DIR)) {
+      const skillPath = join(SKILLS_DIR, skill, 'SKILL.md');
+      if (!existsSync(skillPath)) continue;
+      
+      // Check cooldown
+      const lastRun = cooldown[skill] || 0;
+      if (now - lastRun < RALPH_WIGGUM_COOLDOWN) continue;
+      
+      // Score by complexity (file size = proxy for complexity)
+      const stat = { size: 0 };
+      try {
+        const { statSync } = await import('node:fs');
+        const fs = await import('node:fs');
+        stat.size = fs.statSync(skillPath).size;
+      } catch { stat.size = 1000; }
+      
+      candidates.push({ skill, size: stat.size, lastRun });
+    }
+    
+    if (candidates.length === 0) return null;
+    
+    // Sort by size (larger = more room for improvement) + age
+    candidates.sort((a, b) => {
+      const ageA = now - a.lastRun;
+      const ageB = now - b.lastRun;
+      return (b.size * ageA) - (a.size * ageB);
+    });
+    
+    return candidates[0]?.skill || null;
+  } catch (e) {
+    console.warn('[OMLS] selectSkillForSelfImprovement error:', e);
+    return null;
+  }
+}
+
+/**
+ * Trigger Ralph Wiggum self-referential loop during idle
+ */
+export async function triggerRalphWiggumLoop(skillName = null) {
+  try {
+    const rwg = await getRalphWiggumModule();
+    if (!rwg) return { success: false, reason: 'Ralph Wiggum not available' };
+    
+    const targetSkill = skillName || await selectSkillForSelfImprovement();
+    if (!targetSkill) {
+      return { success: false, reason: 'No skill available for self-improvement' };
+    }
+    
+    console.log(`[OMLS] Ralph Wiggum loop starting on: ${targetSkill}`);
+    
+    // Run the loop with limited iterations for idle context
+    const result = await rwg.runRalphWiggumLoop(targetSkill, {
+      maxIterations: 3,
+      minQualityThreshold: 0.8,
+    });
+    
+    if (result.success && result.bestVersion) {
+      // Apply the best version back to the skill
+      const applied = await rwg.applyToSkill(result.state.skillName);
+      
+      // Update cooldown
+      const cooldownPath = join(process.env.APPDATA || '', '.openclaw', 'memory', 'evolution', 'ralph_wiggum', 'cooldown.json');
+      const { mkdirSync } = await import('node:fs');
+      const dir = join(process.env.APPDATA || '', '.openclaw', 'memory', 'evolution', 'ralph_wiggum');
+      mkdirSync(dir, { recursive: true });
+      
+      let cooldown = {};
+      if (existsSync(cooldownPath)) {
+        cooldown = JSON.parse(readFileSync(cooldownPath, 'utf-8'));
+      }
+      cooldown[targetSkill] = Date.now();
+      writeFileSync(cooldownPath, JSON.stringify(cooldown, null, 2), 'utf-8');
+      
+      return {
+        success: true,
+        skill: targetSkill,
+        iterations: result.iterations,
+        qualityBefore: result.state.qualityScores[0] || 0,
+        qualityAfter: result.bestVersion.score,
+        improvement: result.bestVersion.score - (result.state.qualityScores[0] || 0),
+        sessionId: result.sessionId,
+      };
+    }
+    
+    return { success: false, reason: 'Loop did not produce improvement' };
+  } catch (e) {
+    console.warn('[OMLS] Ralph Wiggum loop error:', e);
+    return { success: false, reason: e.message };
+  }
+}
+
 export function getIdleStats() {
   const state = loadState();
   return {
