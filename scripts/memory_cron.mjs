@@ -232,7 +232,85 @@ function checkSops() {
 // Main Cron Loop
 // ============================================================================
 
-function tick() {
+// ============================================================================
+// OMLS Idle Scheduler — Evolver启发: idle时执行激进操作
+// ============================================================================
+
+let _idleScheduler = null;
+async function getIdleScheduler() {
+  if (_idleScheduler) return _idleScheduler;
+  try {
+    _idleScheduler = await import('../modules/idleScheduler.mjs');
+  } catch { _idleScheduler = null; }
+  return _idleScheduler;
+}
+
+async function runOmlsCycle() {
+  const scheduler = await getIdleScheduler();
+  if (!scheduler) return;
+
+  try {
+    const rec = scheduler.getScheduleRecommendation();
+    if (!rec.enabled) return;
+
+    console.log(`[cron/omls] Idle window: ${rec.idle_seconds}s — ${rec.reason}`);
+
+    // Explore: scan for new signals
+    if (rec.should_explore) {
+      try {
+        const signals = await scheduler.exploreSignals();
+        if (signals.length > 0) {
+          console.log(`[cron/omls] Explored signals: ${signals.join(' | ')}`);
+          // Log to memory
+          const entry = JSON.stringify({
+            type: 'omls_explore',
+            timestamp: new Date().toISOString(),
+            signals,
+            intensity: rec.intensity,
+          }) + '\n';
+          writeFileSync(MEMORY_DIR + '/omls_log.jsonl', entry, { flag: 'a', encoding: 'utf8' });
+        }
+      } catch (e) {
+        console.warn('[cron/omls] Explore error:', e.message);
+      }
+    }
+
+    // Distill: trigger auto-skill creator on failure patterns
+    if (rec.should_distill) {
+      try {
+        const { spawn } = $require('node:child_process');
+        const scriptPath = STATE_DIR.replace(/\\/g, '/') + '/workspace/modules/auto_skill_creator.py';
+        const proc = spawn('python', [scriptPath], { stdio: 'pipe', windowsHide: true });
+        let stdout = '', stderr = '';
+        proc.stdout.on('data', d => { stdout += d.toString(); });
+        proc.stderr.on('data', d => { stderr += d.toString(); });
+        proc.on('close', code => {
+          if (code === 0 && stdout.trim()) {
+            try {
+              const result = JSON.parse(stdout.trim());
+              if (result.skills_created > 0) {
+                console.log(`[cron/omls] Distill: created ${result.skills_created} skill(s): ${result.created_skills.join(', ')}`);
+              }
+            } catch { /* ignore */ }
+          }
+        });
+      } catch (e) {
+        console.warn('[cron/omls] Distill error:', e.message);
+      }
+    }
+  } catch (e) {
+    console.warn('[cron/omls] Scheduler error:', e.message);
+  }
+}
+
+// ============================================================================
+// Tick — main cron loop
+// ============================================================================
+
+async function tick() {
+  // OMLS: idle-aware aggressive operations
+  await runOmlsCycle();
+
   const state = getCronState();
   const now = Date.now();
   let changed = false;
@@ -328,7 +406,7 @@ if (IS_ONCE) {
 tick();
 
 // Then schedule
-setInterval(tick, 60 * 60 * 1000); // Check every hour
+setInterval(() => { tick().catch(e => console.error('[cron] tick error:', e.message)); }, 60 * 60 * 1000); // Check every hour
 
 if (IS_DAEMON) {
   console.log('[memory_cron] Running as daemon. PID:', process.pid);

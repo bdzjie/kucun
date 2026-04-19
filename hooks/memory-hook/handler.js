@@ -10,6 +10,16 @@ import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } fr
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
+// OMLS Idle Scheduler — reset idle counter on user activity
+let _idleScheduler = null;
+async function getIdleScheduler() {
+  if (_idleScheduler) return _idleScheduler;
+  try {
+    _idleScheduler = await import('./modules/idleScheduler.mjs');
+  } catch { _idleScheduler = { onActivity: () => {} }; }
+  return _idleScheduler;
+}
+
 const STATE_DIR = 'C:/Users/Administrator/.openclaw';
 const MEMORY_DIR = STATE_DIR + '/memory';
 
@@ -253,6 +263,9 @@ async function onAgentBootstrap(event) {
 }
 
 async function onMessagePreprocessed(event) {
+  // OMLS: reset idle counter on user activity
+  try { (await getIdleScheduler()).onActivity(); } catch { /* ignore */ }
+
   const { context } = event;
   const { content, senderId, senderName, conversationId } = context || {};
   if (!content || content.trim().length < 15) return;
