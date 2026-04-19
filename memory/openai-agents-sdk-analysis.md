@@ -6,6 +6,162 @@
 
 ---
 
+## 深度分析补充（第二轮）
+
+### 核心文件分析
+
+#### turn_resolution.py — 执行引擎核心
+
+```python
+# 关键函数
+async def _maybe_finalize_from_tool_results(...):
+    # 检查工具是否返回了最终输出
+    check_tool_use = await check_for_final_output_from_tools(...)
+    if check_tool_use.is_final_output:
+        return await execute_final_output(...)
+
+async def execute_handoffs(...):
+    # 执行 agent-to-agent 切换
+    with handoff_span(from_agent=public_agent.name) as span_handoff:
+        new_agent = await handoff.on_invoke_handoff(context, args)
+        # 调用 on_handoff hooks
+        await asyncio.gather(
+            hooks.on_handoff(ctx, from_agent, to_agent),
+            public_agent.hooks.on_handoff(ctx, to_agent, source),
+        )
+        # 处理输入过滤和历史嵌套
+        input_filter = handoff.input_filter or run_config.handoff_input_filter
+        should_nest = handoff.nest_history if handoff.nest_history is not None else run_config.nest_handoff_history
+```
+
+**关键洞察**:
+- 多个 handoff 在同一 turn：只执行第一个，其余返回 "Multiple handoffs detected"
+- `handoff_span` 用于追踪整个切换过程
+- 输入过滤可嵌套，通过 `nest_handoff_history_fn` 支持自定义
+
+#### lifecycle.py — RunHooksBase 完整定义
+
+```python
+class RunHooksBase(Generic[TContext, TAgent]):
+    # Turn 生命周期
+    async def on_llm_start(self, context, agent, system_prompt, input_items): pass
+    async def on_llm_end(self, context, agent, response): pass
+    
+    # Agent 生命周期
+    async def on_agent_start(self, context, agent): pass
+    async def on_agent_end(self, context, agent, output): pass
+    
+    # Tool 生命周期
+    async def on_tool_start(self, context, agent, tool): pass
+    async def on_tool_end(self, context, agent, tool, result): pass
+    
+    # Handoff 生命周期
+    async def on_handoff(self, context, from_agent, to_agent): pass
+
+class AgentHooksBase(Generic[TContext, TAgent]):
+    # 每个 Agent 自己的 hooks
+    async def on_start(self, context, agent): pass
+    async def on_end(self, context, agent, output): pass
+    async def on_handoff(self, context, agent, source): pass
+```
+
+**洞察**: 两级 Hook 系统 — 全局 RunHooks + 单个 Agent Hooks。
+
+#### tool_guardrails.py — Tool 级别 Guardrail
+
+```python
+# 三种行为
+class ToolGuardrailFunctionOutput:
+    behavior = {
+        "type": "allow" | "reject_content" | "raise_exception",
+        "message": str  # reject_content 时显示给模型的消息
+    }
+
+# ToolInputGuardrail — 工具执行前检查
+@dataclass
+class ToolInputGuardrail(Generic[TContext_co]):
+    guardrail_function: Callable[[ToolInputGuardrailData], ...]
+    
+    async def run(self, data: ToolInputGuardrailData):
+        # data.context 是 ToolContext
+        # 包含 tool_name, tool_call_id, tool_arguments
+
+# ToolOutputGuardrail — 工具执行后检查
+@dataclass  
+class ToolOutputGuardrail(Generic[TContext_co]):
+    guardrail_function: Callable[[ToolOutputGuardrailData], ...]
+    # data 额外包含 output
+```
+
+**洞察**: 
+- `reject_content` 允许继续执行但替换输出内容
+- `raise_exception` 真正中断执行
+- `ToolContext` 包含完整的调用上下文（tool_call_id 等）
+
+#### tracing/spans.py — Span 实现
+
+```python
+class SpanImpl(Span[TSpanData]):
+    __slots__ = ("_trace_id", "_span_id", "_parent_id", 
+                 "_started_at", "_ended_at", "_error", 
+                 "_prev_span_token", "_processor", "_span_data")
+    
+    # Contextvars 用于 async-safe TLS
+    def start(self, mark_as_current=False):
+        self._started_at = util.time_iso()
+        self._processor.on_span_start(self)
+        if mark_as_current:
+            self._prev_span_token = Scope.set_current_span(self)
+
+# NoOpSpan - tracing 禁用时的无操作实现
+class NoOpSpan(Span[TSpanData]):
+    # 所有操作都是 no-op，不记录任何数据
+```
+
+**洞察**:
+- 使用 `__slots__` 优化内存
+- ISO 时间戳 (`util.time_iso()`) 替代 Unix ms
+- `Scope.set_current_span()` 使用 contextvars 实现异步安全的当前 span 追踪
+
+#### agent.py — Agent 完整定义
+
+```python
+@dataclass
+class Agent(AgentBase[TContext]):
+    # 核心
+    instructions: str | Callable | None
+    tools: list[Tool] = field(default_factory=list)
+    handoffs: list[Handoff] = field(default_factory=list)
+    
+    # Guardrail
+    input_guardrails: list[InputGuardrail[TContext]] = field(default_factory=list)
+    output_guardrails: list[OutputGuardrail[TContext]] = field(default_factory=list)
+    
+    # 输出类型
+    output_type: type | None = None
+    tools_to_final_output: ToolsToFinalOutputFunction | None = None
+    
+    # MCP
+    mcp_servers: list[MCPServer] = field(default_factory=list)
+    
+    # Hooks
+    hooks: AgentHooks[TContext] | None = None
+
+@dataclass
+class ToolsToFinalOutputResult:
+    is_final_output: bool
+    final_output: Any | None = None
+
+# get_all_tools() 合并 MCP + 启用状态的工具
+async def get_all_tools(self, run_context):
+    mcp_tools = await self.get_mcp_tools(run_context)
+    # 过滤 is_enabled
+    enabled = await asyncio.gather(*[_check_tool_enabled(t) for t in self.tools])
+    all_tools = prune_orphaned_tool_search_tools([*mcp_tools, *enabled])
+```
+
+---
+
 ## 核心架构
 
 ### Agent 运行循环
@@ -291,4 +447,115 @@ src/agents/
 ├── mcp/                   # MCP 集成
 ├── tracing/              # Span 追踪
 └── exceptions.py          # 异常类型
+
+---
+
+## 已实现功能（OpenClaw）
+
+| 功能 | 状态 | 实现文件 |
+|------|------|---------|
+| Tool Guardrail (Input/Output) | ✅ v1 | `modules/tool_guardrail_hook.mjs` |
+| Tool Guardrail (v2, with behaviors) | ✅ | `modules/tool_guardrails_v2.mjs` |
+| Session Compaction Protocol | ✅ | `modules/session_compaction_protocol.mjs` |
+| Lifecycle Hooks | ✅ | `modules/run_hooks_lifecycle.mjs` |
+| Span Tracing | ✅ | `modules/span_tracing.mjs` |
+| Agent Handoff System | ✅ | `modules/agent_handoff.mjs` |
+| /lifecycle-tracing skill | ✅ | `skills/lifecycle-tracing/` |
+| /agent-handoff skill | ✅ | `skills/agent-handoff/` |
+| ToolsToFinalOutput pattern | 🔜 | 待实现 |
+| Handoff with history nesting | 🔜 | `agent_handoff.mjs` 已支持 |
+| ComputerTool (browser automation) | ❌ | 需要浏览器扩展 |
+
+### Tool Guardrail v2 特性
+
+```javascript
+// 三种行为
+ToolGuardrailOutput.allow({ check: 'path', passed: true })
+ToolGuardrailOutput.rejectContent('Path traversal detected', { blocked: true })
+ToolGuardrailOutput.raiseException({ reason: 'critical' })
+
+// 内置检查器
+pathTraversalGuardrail()    // 路径遍历检测
+bashDangerousCommandGuardrail()  // 危险命令检测
+outputSizeGuardrail(100000)      // 输出大小限制
+sqlInjectionGuardrail()         // SQL 注入检测
+```
+
+### Span Tracing 特性
+
+```javascript
+import { trace, span, getCurrentSpan } from './modules/span_tracing.mjs';
+
+// 创建 trace 并执行
+const result = await trace('my-run', { metadata: {} }, async (t) => {
+  const s = t.span('llm-call', { type: 'llm', model: 'gpt-4' });
+  await s.run(async () => {
+    const result = await callModel();
+    s.setAttribute('tokens', result.usage.outputTokens);
+  });
+});
+```
+
+### Agent Handoff 特性
+
+```javascript
+import { createHandoff, nestHandoffHistory } from './modules/agent_handoff.mjs';
+
+// 创建 handoff
+const handoff = createHandoff({
+  toAgent: 'researcher',
+  description: 'Transfer to research specialist',
+  inputFilter: async (input) => addContextFilter({ mode: 'research' }),
+  nestHistory: true,
+});
+
+// 嵌套历史
+const nested = nestHandoffHistory(input, { prefix: 'Prior context:', maxDepth: 5 });
+```
+
+---
+
+## 深度学习总结
+
+### SDK 架构设计亮点
+
+1. **泛型 Context 类型** (`TContext`)
+   - 所有组件都用 `Generic[TContext]` 声明
+   - 允许用户定义自己的上下文类型，贯穿整个调用链
+
+2. **分层 Hook 系统**
+   - `RunHooks` (全局) + `AgentHooks` (单 Agent)
+   - 两级都可以定义 `on_handoff`, `on_tool_*`, `on_llm_*`
+
+3. **ToolContext 传递**
+   - `ToolContext` 包含 `tool_call_id`, `tool_name`, `tool_arguments`
+   - Guardrail 可以访问完整的调用上下文
+
+4. **Span + Processor 分离**
+   - `SpanImpl` / `NoOpSpan` 实现
+   - `TracingProcessor` 接口（`on_span_start/end`, `on_trace_end`）
+   - Batch processor 支持批量导出
+
+5. **Handoff 的多重保障**
+   - `input_filter` 转换输入
+   - `nest_history` 保留历史
+   - `on_invoke_handoff` 动态目标解析
+   - `handoff_span` 追踪整个切换
+
+6. **Guardrail 行为系统**
+   - `allow` / `reject_content` / `raise_exception`
+   - `reject_content` 巧妙：给模型一条消息而不是异常
+
+### OpenClaw 适配策略
+
+由于 OpenClaw 是 Bun 运行时且 skill 系统基于文件 + hook：
+
+1. **Lifecycle Hooks** → `hooks/` 层实现
+2. **Span Tracing** → `modules/span_tracing.mjs`（纯 ESM）
+3. **Tool Guardrail** → `hooks/tool-guardrail-hook/`
+4. **Agent Handoff** → `skills/agent-handoff/`（命令式）
+5. **Session Compaction** → `modules/session_compaction_protocol.mjs`
+
+Python 不能直接 import 到 Bun/Node ESM，所以所有核心模块都用纯 JavaScript/ESM 实现。
+Python 模块（如 `auto_skill_creator.py`）通过 `child_process.spawn` 调用。
 ```
