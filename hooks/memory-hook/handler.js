@@ -8,6 +8,7 @@
 
 import { appendFileSync, readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { spawn } from 'node:child_process';
 
 const STATE_DIR = 'C:/Users/Administrator/.openclaw';
 const MEMORY_DIR = STATE_DIR + '/memory';
@@ -142,6 +143,36 @@ async function onSessionPatch(event) {
   } catch (e) {
     console.warn('[memory-hook] Session end logging failed:', e.message);
   }
+
+  // Auto Skill Creator — Hermes: detect patterns after session end
+  try {
+    triggerAutoSkillCreator();
+  } catch (e) {
+    console.warn('[memory-hook] Auto skill creator failed:', e.message);
+  }
+}
+
+function triggerAutoSkillCreator() {
+  const scriptPath = resolve(STATE_DIR.replace(/\\/g, '/'), 'workspace/modules/auto_skill_creator.py');
+  const proc = spawn('python', [scriptPath], { stdio: 'pipe' });
+  let stdout = '';
+  let stderr = '';
+  proc.stdout.on('data', d => { stdout += d.toString(); });
+  proc.stderr.on('data', d => { stderr += d.toString(); });
+  proc.on('close', code => {
+    if (code === 0 && stdout.trim()) {
+      try {
+        const result = JSON.parse(stdout.trim());
+        if (result.skills_created > 0) {
+          console.log(`[memory-hook] Auto-skill: created ${result.skills_created} skill(s): ${result.created_skills.join(', ')}`);
+        } else {
+          console.log(`[memory-hook] Auto-skill: checked ${result.candidates_found} candidates — no new skills (threshold: 60%)`);
+        }
+      } catch { /* ignore parse errors */ }
+    } else if (stderr) {
+      console.warn('[memory-hook] Auto-skill stderr:', stderr.slice(0, 100));
+    }
+  });
 }
 
 // ============================================================================
