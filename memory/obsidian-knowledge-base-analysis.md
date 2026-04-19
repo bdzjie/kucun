@@ -82,12 +82,15 @@ swarmvault.schema.md — 知识库结构定义
 | **VaultHealth** | 知识库自愈/健康分 | `modules/knowledge/vault_health.mjs` |
 | **KnowledgeGraph** | 笔记关系图/聚类 | `modules/knowledge/knowledge_graph.mjs` |
 | **ObsidianSync** | 双向同步 | `modules/knowledge/obsidian_sync.mjs` |
+| **ContradictionDetector** | 矛盾检测（SVO三元组/否定/数值冲突） | `modules/knowledge/contradiction_detector.mjs` |
+| **SwarmVaultBridge** | SwarmVault CLI 桥接 | `modules/knowledge/swarmvault_bridge.mjs` |
 
-### Skill
+### Skills
 
 | Skill | 命令 |
 |-------|------|
-| **obsidian-knowledge** | `--scan\|--orphans\|--daily\|--health\|--stats\|--export-memories\|--generate-moc\|--index` |
+| **obsidian-knowledge** | `--scan\|--orphans\|--daily\|--health\|--stats\|--export-memories\|--generate-moc\|--index\|--links\|--graph` |
+| **swarmvault** | `--status\|--init\|--scan\|--ingest\|--compile\|--query\|--lint\|--graph\|--sources\|--detect-conflicts` |
 
 ### 文件
 
