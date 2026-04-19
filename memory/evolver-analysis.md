@@ -349,17 +349,17 @@ Node.js >= 18
 
 ## 对 OpenClaw 的启发
 
-| 启发 | 当前状态 | 可落地 |
-|------|---------|--------|
-| **Gene Validation** | auto_skill_creator 无验证 | Skill创建时声明验证命令 |
-| **EvolutionEvent 审计** | WAL仅日志 | 显式EvolutionEvent记录 |
-| **Constraint 约束** | 无 | 进化时禁止修改.git/node_modules |
-| **策略切换** | 固定 | 根据错误率切换 repair-only 模式 |
-| **Signal 去重** | 无 | 检测重复修复模式 |
-| **Skill Store** | 无 | 技能发布到共享网络 |
-| **OMLS Idle** | heartbeat机制已存在 | idle时执行distill/explore ⭐ |
-| **Daemon自我修复** | cron定时调度 | 单例锁+自适应休眠+自杀重启 |
-| **Ops可移植** | 无 | 零依赖运维工具(cleanup/diskmon等) |
+| 启发 | 当前状态 | 落地 |
+|------|---------|------|
+| **OMLS Idle** | heartbeat机制已存在 | ✅ `modules/idleScheduler.mjs` + `memory_cron.mjs`集成 |
+| **EvolutionEvent 审计** | WAL仅日志 | ✅ `evolution_events.jsonl` 审计日志 |
+| **Constraint 约束** | 无 | ✅ `validate_constraint()` 禁止危险技能名 |
+| **Signal 去重** | 无 | ✅ Constraint + 重复触发检测 |
+| **Daemon自我修复** | cron定时调度 | ⚙️ 单例锁可附加到cron守护进程 |
+| **Gene Validation** | auto_skill_creator 无验证 | ⚙️ SKILL.md可声明validation字段 |
+| **策略切换** | 固定 | ⚙️ 根据idle intensity调整行为 |
+| **Skill Store** | 无 | ❌ 暂不适用（需要网络） |
+| **Ops可移植** | 无 | ⚙️ cleanup/diskmon可单独实现 |
 
 ---
 
