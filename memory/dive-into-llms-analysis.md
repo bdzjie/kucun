@@ -95,12 +95,12 @@ eval_detection.py --hm_zscore --wm_zscore --roc_curve
 ### 3. EasyJailbreak → Prompt 攻击检测
 **启发**: 检测恶意 prompt 注入
 
-**可用于**: 
-- 在 `message:preprocessed` hook 中检测 prompt injection
-- 类似 Evaluator 模块的分类器
-- 结合 entity_registry 识别已知攻击模式
+**已落地**: ✅ `hooks/memory-hook/handler.js` - `detectPromptInjection()`
+- 26种攻击模式，6大类别
+- Severity评分 + 安全事件存储
+- 集成在 `message:preprocessed` 中
 
-**实现难度**: 中
+**详见**: `hooks/memory-hook/handler.js`
 
 ### 4. 知识编辑 → 记忆更新
 **启发**: ROME/MEND 等知识编辑技术
