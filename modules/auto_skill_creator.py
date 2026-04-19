@@ -33,6 +33,7 @@ STATE_DIR = os.path.expanduser('~/.openclaw')
 WORKSPACE = os.path.expanduser('C:/Users/Administrator/.openclaw/workspace')
 SKILLS_DIR = WORKSPACE + '/skills'
 SKILL_REGISTRY_FILE = STATE_DIR + '/memory/skill_registry.json'
+EVOLUTION_EVENTS_FILE = STATE_DIR + '/memory/evolution_events.jsonl'
 
 MIN_REPEAT_COUNT = 3
 MIN_TOOL_CHAIN_COUNT = 5
@@ -87,6 +88,39 @@ def validate_constraint(skill_name: str) -> tuple[bool, str]:
             return False, f'Forbidden pattern in name: {pattern}'
 
     return True, 'OK'
+
+
+def log_evolution_event(
+    gene_id: str,
+    intent: str,
+    strategy: str,
+    result: str,
+    skill_name: str,
+    validation_output: str = '',
+    capsule_id: str = '',
+) -> None:
+    """
+    Log an EvolutionEvent (Evolver-inspired audit trail).
+    Written to ~/.openclaw/memory/evolution_events.jsonl
+    """
+    import uuid
+    event = {
+        'type': 'EvolutionEvent',
+        'event_id': f'evt_{uuid.uuid4().hex[:8]}',
+        'gene_id': gene_id,
+        'intent': intent,
+        'strategy': strategy,
+        'result': result,
+        'skill_name': skill_name,
+        'validation_output': validation_output,
+        'capsule_id': capsule_id,
+        'timestamp': datetime.now().isoformat(),
+    }
+    try:
+        with open(EVOLUTION_EVENTS_FILE, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(event, ensure_ascii=False) + '\n')
+    except Exception as e:
+        print(f'[auto_skill_creator] Failed to log EvolutionEvent: {e}', flush=True)
 
 
 def check_file_constraint(file_path: str) -> tuple[bool, str]:
@@ -344,6 +378,14 @@ def create_skill(candidate: SkillCandidate) -> bool:
     allowed, reason = validate_constraint(candidate.skill_name)
     if not allowed:
         print(f'[auto_skill_creator] Constraint blocked: {reason}', flush=True)
+        log_evolution_event(
+            gene_id='gene_auto_skill_creator',
+            intent=candidate.pattern_type,
+            strategy=f'confidence={candidate.confidence:.0%}',
+            result='constraint_blocked',
+            skill_name=candidate.skill_name,
+            validation_output=f'blocked: {reason}',
+        )
         return False
 
     skill_path = os.path.join(SKILLS_DIR, candidate.skill_name)
@@ -481,6 +523,16 @@ Auto-generated skill handler. Modify `handler.js` to customize behavior.
 
     # 注册到 skill registry
     _register_skill(candidate)
+
+    # Log EvolutionEvent — Evolver-inspired audit trail
+    log_evolution_event(
+        gene_id='gene_auto_skill_creator',
+        intent=candidate.pattern_type,
+        strategy=f'confidence={candidate.confidence:.0%}',
+        result='success',
+        skill_name=candidate.skill_name,
+        validation_output=f'patterns={len(candidate.trigger_patterns)}, evidence={len(candidate.evidence)}',
+    )
 
     return True
 
