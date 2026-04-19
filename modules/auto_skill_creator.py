@@ -309,22 +309,62 @@ This skill was automatically created based on detected usage patterns.
 Edit this file to refine the skill behavior.
 """
 
-    # 生成 handler.js
-    handler_js = f"""/**
+    # Generate handler.js — GenericAgent self-bootstrapping style
+    trigger_list = json.dumps(candidate.trigger_patterns[:5], ensure_ascii=False)
+    handler_js = f"""
+/**
  * Auto-generated Skill Handler: {candidate.skill_name}
  * Created: {candidate.created_at}
+ * Confidence: {candidate.confidence:.0%}
  *
- * Triggers: {', '.join(p[:50] for p in candidate.trigger_patterns[:3])}
+ * Trigger Patterns:
+ *   {chr(10).join(p[:70] for p in candidate.trigger_patterns[:3])}
+ *
+ * Evidence:
+ *   {chr(10).join(e[:80] for e in candidate.evidence[:2])}
+ *
+ * GenericAgent Self-Bootstrapping: 任务成功后自动固化执行路径。
  */
 
 export default async function handler(event) {{
-    const {{ type, data }} = event;
+    const skillName = '{candidate.skill_name}';
+    const confidence = {candidate.confidence:.2f};
+
+    let input = '';
+    if (event?.context?.content) input = event.context.content;
+    else if (event?.message?.content) input = event.message.content;
+
+    // Trigger matching — exact + fuzzy
+    const triggers = {trigger_list};
+    const matched = triggers.find(t =>
+        typeof t === 'string' && input.toLowerCase().includes(t.toLowerCase())
+    );
+
+    if (!matched) {{
+        const triggerWords = triggers.flatMap(t =>
+            t.split(/[\\s,_-]+/).filter(w => w.length > 2)
+        );
+        const inputWords = input.toLowerCase().split(/[\\s,_-]+/);
+        const hit = triggerWords.some(w => inputWords.some(iw => iw.includes(w)));
+        if (!hit) {{
+            return {{
+                handled: true,
+                skill: skillName,
+                status: 'no_match',
+                triggers,
+                message: `[$\{{skillName\}}] Trigger not matched. Try: $\{{triggers[0]?.slice(0,50)}}`,
+            }};
+        }}
+    }}
 
     return {{
         handled: true,
-        skill: '{candidate.skill_name}',
-        action: 'executed',
+        skill: skillName,
+        status: 'executed',
+        confidence,
         timestamp: new Date().toISOString(),
+        trigger: matched || 'fuzzy',
+        message: `[$\{{skillName\}}] Skill executed. Confidence: $\{{(confidence*100).toFixed(0)}}%`,
     }};
 }}
 """
