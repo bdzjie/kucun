@@ -38,6 +38,67 @@ MIN_REPEAT_COUNT = 3
 MIN_TOOL_CHAIN_COUNT = 5
 
 # ============================================================================
+# Constraint System — Evolver-inspired safety checks
+# ============================================================================
+
+FORBIDDEN_SKILL_NAMES = {
+    'system', 'kernel', 'root', 'admin', 'sudo', 'password', 'secret',
+    'eval', 'exec', 'exec-inline', 'windows-gui', 'windows-gui-workflow',
+    'memory-hook', 'hooks', 'scripts', 'modules',
+}
+
+FORBIDDEN_PATH_PATTERNS = [
+    '..', '/.git/', '\\.git\\', '/node_modules/', '\\node_modules\\',
+    '/.openclaw/', '\\.openclaw\\', '/windows/', '\\windows\\',
+    '/System32/', '\\System32\\', '/Windows/', '\\Windows\\',
+    '/usr/bin/', '\\usr\\bin\\', '/bin/', '\\bin\\',
+]
+
+def validate_constraint(skill_name: str) -> tuple[bool, str]:
+    """
+    Check if skill creation is safe (Evolver Constraint-inspired).
+    Returns (allowed, reason).
+    """
+    # 1. Forbidden names check
+    if skill_name.lower() in FORBIDDEN_SKILL_NAMES:
+        return False, f'Forbidden skill name: {skill_name}'
+
+    # 2. Path traversal check
+    if '..' in skill_name or '/' in skill_name or '\\' in skill_name:
+        return False, f'Path traversal attempt: {skill_name}'
+
+    # 3. Alphanumeric + underscore + dash only
+    if not re.match(r'^[a-zA-Z0-9_-]+$', skill_name):
+        return False, f'Invalid characters in skill name: {skill_name}'
+
+    # 4. Length check
+    if len(skill_name) < 3 or len(skill_name) > 64:
+        return False, f'Skill name length must be 3-64: {skill_name}'
+
+    # 5. Reserved prefix check
+    for prefix in ['openclaw', 'hook', 'skill', 'system']:
+        if skill_name.lower().startswith(prefix + '-'):
+            return False, f'Reserved prefix ({prefix}): {skill_name}'
+
+    # 6. Pattern blacklist check
+    skill_lower = skill_name.lower()
+    for pattern in FORBIDDEN_PATH_PATTERNS:
+        if pattern.lstrip('/\\').lower() in skill_lower:
+            return False, f'Forbidden pattern in name: {pattern}'
+
+    return True, 'OK'
+
+
+def check_file_constraint(file_path: str) -> tuple[bool, str]:
+    """Check if a file path is safe to write."""
+    path_lower = file_path.lower().replace('\\', '/')
+    for forbidden in FORBIDDEN_PATH_PATTERNS:
+        f_lower = forbidden.lower().replace('\\', '/')
+        if f_lower in path_lower:
+            return False, f'Forbidden path: {forbidden}'
+    return True, 'OK'
+
+# ============================================================================
 # Types
 # ============================================================================
 
@@ -279,7 +340,19 @@ def create_skill(candidate: SkillCandidate) -> bool:
     if skill_exists(candidate.skill_name):
         return False
 
+    # Evolver Constraint check — prevent破坏性技能创建
+    allowed, reason = validate_constraint(candidate.skill_name)
+    if not allowed:
+        print(f'[auto_skill_creator] Constraint blocked: {reason}', flush=True)
+        return False
+
     skill_path = os.path.join(SKILLS_DIR, candidate.skill_name)
+
+    # File-level constraint check
+    allowed, reason = check_file_constraint(skill_path)
+    if not allowed:
+        print(f'[auto_skill_creator] File constraint blocked: {reason}', flush=True)
+        return False
     os.makedirs(skill_path, exist_ok=True)
 
     # 生成 SKILL.md
