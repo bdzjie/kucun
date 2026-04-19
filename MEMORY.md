@@ -307,6 +307,59 @@ Claude Code 的设计亮点：
 
 ---
 
+## GenericAgent 源码分析
+
+**分析日期**: 2026-04-19
+**仓库**: github.com/lsdefine/GenericAgent (~3K 行核心)
+**核心哲学**: 不预设技能，靠进化获得能力
+
+### 关键架构
+
+| 模块 | 功能 |
+|------|------|
+| `agent_loop.py` | ~100行生成器驱动执行循环 |
+| `ga.py` | 7个原子工具：code_run/file_read/file_write/file_patch/web_scan/web_execute_js/ask_user |
+| `agentmain.py` | GeneraticAgent 主类 + LLM客户端管理 |
+| `TMWebDriver.py` | 真实Chrome注入（保留登录态）|
+
+### 核心设计亮点
+
+1. **极简工具集**: 7个工具 + code_run动态扩展
+2. **生成器循环**: 每轮yield流式输出进度
+3. **Token管理**: 每10轮重置last_tools防止膨胀
+4. **inline_eval**: code_run支持内联eval，减少文件IO
+5. **file_patch唯一性**: count==1才执行，防止意外修改
+6. **真实浏览器**: TMWebDriver注入，保留登录态
+7. **Skill自举**: 任务完成自动生成SKILL.md沉淀经验
+
+### 4层记忆
+
+| 层级 | 内容 |
+|------|------|
+| L0 Meta | 基础行为规则 |
+| L1 Insight | 极简索引 |
+| L2 Facts | 长期知识 |
+| L3 Skills | 可复用工作流 |
+
+### 自我进化机制
+
+```
+新任务 → 自主摸索(安装依赖/写脚本/调试) → 固化为Skill → 下次一句话执行
+```
+
+### 与OpenClaw对比
+
+| 维度 | GenericAgent | OpenClaw |
+|------|-------------|----------|
+| 代码量 | ~3K | ~530K |
+| 工具集 | 7个原子 | 16个内置+MCP |
+| 进化 | AI自举Skill | 手动创建 |
+| 浏览器 | 真实Chrome注入 | headless/sandbox |
+
+**详见**: `memory/generic-agent-analysis.md`
+
+---
+
 ## OpenClaw 记忆系统 v2 — 已实现
 
 **实现日期**: 2026-04-18
