@@ -538,3 +538,53 @@ modules/registry/      # Hermes 风格重写
 
 *最后更新: 2026-04-17 23:02*
 *基于 Claude Code + MemPalace + Hermes Agent 架构分析*
+
+
+---
+
+## 进化记录 (2026-04-19)
+
+### 1. Session Replay (GenericAgent L4启发)
+
+**来源**: github.com/lsdefine/GenericAgent L4 Session Archive
+
+**实现**:
+- scripts/session_replay.py — 纯Python BM25，无FTS5依赖
+- skills/session-replay/ — /replay skill
+
+**用法**: /replay <task_description>
+
+**原理**: BM25评分 + Porter词干 + 稀有词分布水印验证
+
+### 2. Memory Watermarking (X-SIR启发)
+
+**来源**: Dive Into LLMs Ch5 X-SIR Watermark
+
+**实现**:
+- modules/memory_watermark.py — Statistical watermark (无需LLM)
+- hooks/memory-hook/ — addPalaceDrawer存储watermark_seed
+- skills/verify-memory/ — /verify-memory skill
+
+**原理**: 
+- embed_watermark(content, seed) — 稀有词分布编码
+- verify_watermark(content, seed) → authentic/modified/uncertain
+- 验证: marked内容100% authentic，原始内容uncertain
+
+### 3. Exec Inline (GenericAgent inline_eval启发)
+
+**来源**: GenericAgent code_run inline_eval
+
+**实现**:
+- skills/exec-inline/ — /eval skill
+
+**原理**: 直接node -e执行，无需临时文件
+
+### 4. auto_skill_creator Handler增强
+
+**来源**: GenericAgent Self-Bootstrapping
+
+**实现**:
+- modules/auto_skill_creator.py — handler.js模板升级
+- GenericAgent风格: confidence + exact+fuzzy匹配 + 证据保留
+
+*最后更新: 2026-04-19 13:55*
