@@ -1,45 +1,55 @@
 ---
+name: session-search
+description: "Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with snippets."
+user-invocable: true
 metadata:
   openclaw:
-    version: 1.0
-    type: skill
-    name: session-search
-    description: Search historical conversations using SQLite FTS5 full-text search. Ask anything about past sessions and get BM25-ranked results with snippets.
-    autoCreated: false
-    examples:
-      - "搜索关于 OpenClaw hook 的历史对话"
-      - "我之前问过关于 memory 系统的问题吗？"
-      - "查找所有讨论 Claude Code 的会话"
+    command-dispatch: tool
+    command-tool: Bash
+    command-arg-mode: raw
 ---
 
 # session-search — Historical Conversation Search
 
 ## Description
 
-Uses SQLite FTS5 BM25 search to find relevant passages from historical sessions.
-Index is rebuilt every 6 hours via the memory cron daemon.
+Searches historical sessions using pure TypeScript BM25 ranking (no Python needed).
+
+**When invoked**, this skill searches all session .jsonl files and returns BM25-ranked results with text snippets.
 
 ## Usage
 
-Ask in natural language — no special syntax needed.
+**Slash command**: `/session-search <your question>`
 
-Example prompts:
-- "搜索关于 hook 系统的会话"
-- "我之前问过 memory palace 吗？"
-- "查找所有讨论 GitHub API 的对话"
-- "我第一次提到 Claude Code 是什么时候？"
+Examples:
+- `/session-search openclaw hook memory`
+- `/session-search markdown format preference`
+- `/session-search Claude Code analysis`
+- `/session-search gateway cron pairing`
+
+**Natural language** (when skill is auto-detected):
+- "搜索关于 hook 系统的历史对话"
+- "我之前问过关于 memory palace 的问题吗？"
+- "查找所有讨论 Claude Code 的会话"
 
 ## Technical Details
 
-- Backend: Python sqlite3 FTS5 with Porter stemming + BM25 ranking
-- Index: `~/.openclaw/memory/fts5.db`
-- Sessions: `~/.openclaw/agents/main/sessions/`
-- Update: Every 6 hours (automatic via memory_cron.mjs)
+- **Backend**: `modules/search/session_fts.ts` — Pure TypeScript BM25
+- **Index**: 221 messages across 2 sessions (in-memory, rebuilt on search)
+- **Sessions**: `~/.openclaw/agents/main/sessions/*.jsonl`
+- **Algorithm**: BM25 (k1=1.5, b=0.75) + Porter stemming
+- **No external dependencies** — runs natively in Node.js/Bun
 
-## Results
+## Results Format
 
-Returns ranked results with:
-- Session ID and timestamp
+Returns ranked results grouped by session:
+- Session ID (anonymized, first 8 chars)
 - BM25 relevance score
 - Matching text snippets with context
-- Role (user or assistant)
+- Role (user/assistant)
+
+## If Search Returns Empty
+
+The in-memory index may need rebuilding. To force a fresh index:
+1. The index rebuilds automatically on first search
+2. If issues persist, the `session_fts.ts` module rebuilds from scratch each time
