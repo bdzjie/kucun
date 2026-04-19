@@ -56,14 +56,24 @@ function appendMemoryEntry(entry) {
 
 function addPalaceDrawer(wing, room, hall, content, metadata = {}) {
   const palace = readJsonFile(MEMORY_DIR + '/palace_state.json', { drawers: [] });
+  const drawerId = `drawer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const sessionKey = metadata?.sessionKey;
+
+  // Watermark metadata (X-SIR inspired) — store seed for later verification
+  const watermarkMeta = sessionKey ? {
+    watermark_seed: `session_${sessionKey}`,
+    watermark_strength: 0.15,
+    watermark_version: '1.0',
+  } : null;
+
   const drawer = {
-    id: `drawer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: drawerId,
     wing,
     room,
     hall,
     content,
-    metadata,
-    addedAt: Date.now()
+    metadata: { ...metadata, watermark: watermarkMeta },
+    addedAt: Date.now(),
   };
   palace.drawers = palace.drawers || [];
   palace.drawers.push(drawer);
