@@ -107,7 +107,7 @@ export default async function handler(args) {
   
   // Status command
   if (flags.includes('--status') || positional[0] === 'status') {
-    const skillName = positional[1] || positional[2] || null;
+    const skillName = flags.includes('--status') ? (positional[0] || null) : (positional[1] || null);
     
     if (!skillName) {
       return { output: 'Usage: /skill-evolution --status [skill-name]' };
@@ -153,7 +153,7 @@ export default async function handler(args) {
   
   // Report command
   if (flags.includes('--report') || positional[0] === 'report') {
-    const skillName = positional[1] || positional[2] || null;
+    const skillName = flags.includes('--report') ? (positional[0] || null) : (positional[1] || null);
     
     if (!skillName) {
       return { output: 'Usage: /skill-evolution --report [skill-name]' };
@@ -205,7 +205,7 @@ export default async function handler(args) {
   
   // Evolve command
   if (flags.includes('--evolve') || positional[0] === 'evolve') {
-    const skillName = positional[1] || positional[2] || null;
+    const skillName = flags.includes('--evolve') ? (positional[0] || null) : (positional[1] || null);
     
     if (!skillName) {
       return { output: 'Usage: /skill-evolution --evolve [skill-name]' };
