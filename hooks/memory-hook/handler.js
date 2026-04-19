@@ -106,6 +106,127 @@ function extractAndStoreMemory(content, senderName, conversationId, sessionKey) 
 }
 
 // ============================================================================
+// Prompt Injection Detection — Inspired by EasyJailbreak Evaluator
+// ============================================================================
+
+const INJECTION_PATTERNS = [
+  // 1. System Prompt Leakage
+  { pattern: /ignore[\s\w]*previous[\s\w]*instructions/i, category: 'prompt_leak', severity: 2, name: 'Ignore Previous Instructions' },
+  { pattern: /disregard[\s\w]*your[\s\w]*(system|original|initial)[\s\w]*instructions/i, category: 'prompt_leak', severity: 2, name: 'Disregard System Instructions' },
+  { pattern: /forget[\s\w]*all[\s\w]*previous[\s\w]*(rules|instruct|prompt)/i, category: 'prompt_leak', severity: 3, name: 'Forget All Rules' },
+  { pattern: /you[\s\w]*are[\s\w]*now[\s\w]*(a?\s*different|a new|an?)\s*(AI|assistant|model)/i, category: 'role_override', severity: 2, name: 'Role Override (You are now)' },
+  { pattern: /pretend[\s\w]*(you are|being|to be)/i, category: 'role_override', severity: 1, name: 'Pretend Mode' },
+
+  // 2. Privilege Escalation
+  { pattern: /grant (yourself |all )?(admin|root|superuser|unrestricted)/i, category: 'privilege_escalation', severity: 3, name: 'Privilege Grant Request' },
+  { pattern: /bypass[\s\w]*(your |the )?(safety|filter|restriction|constraint|policy)/i, category: 'privilege_escalation', severity: 3, name: 'Safety Bypass Request' },
+  { pattern: /disable[\s\w]*(safety|safe|content|filter|moderation)/i, category: 'privilege_escalation', severity: 3, name: 'Disable Safety Filters' },
+  { pattern: /remove[\s\w]*(your |the )?(restriction|constraint|limit)/i, category: 'privilege_escalation', severity: 2, name: 'Remove Restrictions' },
+
+  // 3. Data Exfiltration
+  { pattern: /(repeat|show|print)[\s\w]*(your |the )?(system[\s\w]*prompt|instruction|builtin|prompt[\s\w]*content)/i, category: 'exfiltration', severity: 2, name: 'Prompt Exfiltration Request' },
+  { pattern: /output[\s\w]*your[\s\w]*(initial|original|system|system-prompt)/i, category: 'exfiltration', severity: 2, name: 'System Prompt Output Request' },
+  { pattern: /what[\s\w]*(are |were )?(your |the )?(base|system|default|original)[\s\w]*instructions/i, category: 'exfiltration', severity: 1, name: 'Instructions Query' },
+
+  // 4. Malicious Payload (Common Attack Patterns)
+  { pattern: /(concatenate|join|merge)[\s\w]*((system|role|user)[\s\w]*prompt)/i, category: 'payload', severity: 2, name: 'Prompt Concatenation' },
+  { pattern: /<\s*system[\s\w]*>|<\s*instruction[\s\w]*>/i, category: 'payload', severity: 1, name: 'XML-style Injection' },
+  { pattern: /\\u007B[\s\w]*"(system|role|instruction)/i, category: 'payload', severity: 2, name: 'Unicode JSON Injection' },
+  { pattern: /(base64|base64_decode|eval|exec|__import__|os\.system)/i, category: 'code_injection', severity: 3, name: 'Code Injection Attempt' },
+
+  // 5. Social Engineering
+  { pattern: /you[\s\w]*(must|have to|should always)[\s\w]*(reveal|show|tell|disclose)/i, category: 'social_engineering', severity: 1, name: 'Mandatory Disclosure Demand' },
+  { pattern: /as[\s\w]*(an? )?(AI|assistant|language model)[\s\w]*(you (must|have to|should)|it's (your|their))/i, category: 'social_engineering', severity: 1, name: 'AI Obligation Framing' },
+  { pattern: /pelease|plese|plz|pls/i, category: 'social_engineering', severity: 1, name: 'Casual Manipulation' },
+
+  // 6.越狱关键词
+  { pattern: /(jailbreak|越狱|hack|破解)/i, category: 'jailbreak', severity: 2, name: 'Jailbreak Keyword' },
+  { pattern: /dan[\s\w]*(mode|system)|\/\/\[|DAN Mode/i, category: 'jailbreak', severity: 3, name: 'DAN/Jailbreak Prompt' },
+  { pattern: /(developer|dev|开发者)[\s\w]*(:|\.| mode|\s)/i, category: 'jailbreak', severity: 2, name: 'Developer Mode Request' },
+];
+
+const SUSPICIOUS_FILE_EXTENSIONS = /(cmd|ps1|bat|vbs|exe|msi|sh|bash|dmg|pkg|apk|deb|rpm)/i;
+const SUSPICIOUS_URL_PATTERNS = /(bit\.ly|tinyurl|t\.co|goo\.gl|is\.gd|buff\.ly)/i;
+
+function detectPromptInjection(content) {
+  const alerts = [];
+  const lower = content.toLowerCase();
+
+  for (const rule of INJECTION_PATTERNS) {
+    if (rule.pattern.test(content)) {
+      alerts.push({
+        category: rule.category,
+        severity: rule.severity,
+        name: rule.name,
+        matched: content.match(rule.pattern)?.[0] || rule.pattern.source,
+      });
+    }
+  }
+
+  // Check for suspicious file extensions in context
+  if (SUSPICIOUS_FILE_EXTENSIONS.test(content) && /download|install|run|execute|open/i.test(content)) {
+    alerts.push({ category: 'malicious_download', severity: 2, name: 'Suspicious File Download Request' });
+  }
+
+  // Check for suspicious URL shorteners
+  if (SUSPICIOUS_URL_PATTERNS.test(content)) {
+    alerts.push({ category: 'suspicious_link', severity: 1, name: 'URL Shortener Link' });
+  }
+
+  // Check for token-based attacks (high entropy = suspicious)
+  const tokenDensity = content.split(/\s+/).filter(t => t.length > 20 && /[^a-zA-Z0-9]/.test(t)).length;
+  if (tokenDensity > 5) {
+    alerts.push({ category: 'high_entropy_tokens', severity: 1, name: 'High Entropy Token Injection' });
+  }
+
+  return alerts;
+}
+
+function severityLabel(severity) {
+  return severity === 3 ? '🔴 HIGH' : severity === 2 ? '🟡 MEDIUM' : '🟢 LOW';
+}
+
+function handlePromptAlerts(content, alerts, senderName, sessionKey) {
+  if (alerts.length === 0) return;
+
+  const maxSeverity = Math.max(...alerts.map(a => a.severity));
+  const summary = alerts.map(a => `${severityLabel(a.severity)} ${a.name}`).join('; ');
+
+  console.warn(`[memory-hook] 🚨 Prompt injection detected! (severity: ${maxSeverity})`);
+  console.warn(`[memory-hook]   Sender: ${senderName} | Session: ${sessionKey?.slice(0, 8)}`);
+  for (const alert of alerts) {
+    console.warn(`[memory-hook]   - [${alert.category}] ${alert.name}: "${alert.matched?.slice(0, 60)}"`);
+  }
+
+  // Store as security event (high severity only)
+  if (maxSeverity >= 2) {
+    const wing = 'wing_openclaw';
+    const room = 'security';
+    const hall = 'hall_events';
+    const alertContent = `Security Alert: ${alerts.map(a => a.name).join(', ')} — Sender: ${senderName} — Snippet: ${content.slice(0, 100)}`;
+    const drawer = addPalaceDrawer(wing, room, hall, alertContent, {
+      type: 'security_alert',
+      severity: maxSeverity,
+      alerts,
+      sessionKey,
+    });
+    appendMemoryEntry({
+      type: 'security_alert',
+      drawerId: drawer.id,
+      wing,
+      room,
+      hall,
+      content: alertContent,
+      senderName,
+      sessionKey,
+      severity: maxSeverity,
+      alertCount: alerts.length,
+    });
+    console.warn(`[memory-hook]   ✓ Security alert stored: drawer ${drawer.id}`);
+  }
+}
+
+// ============================================================================
 // Hook Handlers (called by the hook loader based on event type)
 // ============================================================================
 
@@ -125,10 +246,20 @@ async function onMessagePreprocessed(event) {
   const { context } = event;
   const { content, senderId, senderName, conversationId } = context || {};
   if (!content || content.trim().length < 15) return;
+
+  const sender = senderName || senderId || 'unknown';
+
   try {
-    extractAndStoreMemory(content, senderName || senderId || 'unknown', conversationId, event.sessionKey);
+    // 1. Prompt Injection Detection (EasyJailbreak-inspired)
+    const alerts = detectPromptInjection(content);
+    if (alerts.length > 0) {
+      handlePromptAlerts(content, alerts, sender, event.sessionKey);
+    }
+
+    // 2. Memory Extraction
+    extractAndStoreMemory(content, sender, conversationId, event.sessionKey);
   } catch (e) {
-    console.warn('[memory-hook] Memory extraction failed:', e.message);
+    console.warn('[memory-hook] Message processing failed:', e.message);
   }
 }
 
