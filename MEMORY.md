@@ -879,4 +879,54 @@ skills/pref_61e6a00a/
 
 ---
 
+## True Integration — Pure TypeScript Rewrites
+
+**日期**: 2026-04-19
+
+Python 模块无法直接 import 进 Bun/Node ESM Runtime。通过重写为纯 TypeScript 实现真正集成。
+
+### session_fts.ts — 纯 JS BM25 搜索
+
+```typescript
+import { rebuildIndex, search, getSessionSummary } from './modules/search/session_fts.ts'
+
+// 索引
+rebuildIndex(sessionsDir)  // → 221 messages across 2 sessions
+
+// 搜索
+const results = search('memory hook', { limit: 10 })
+// → [{ sessionId, messageId, role, content, score, snippet }]
+
+// 会话摘要
+getSessionSummary(sessionId)  // → { messageCount, topics, ... }
+```
+
+**特性**:
+- Inverted index + Porter stemming
+- BM25 (k1=1.5, b=0.75)
+- Snippet 生成 with context window
+- ESM import 从 skills/ 工作正常
+
+### conversation_analyst.ts — 纯 JS 会话分析
+
+```typescript
+import { generateReport, formatReport } from './modules/conversation_analyst.ts'
+
+const report = generateReport(sessionsDir)
+// → { sessionsAnalyzed: 2, aggregate: { totalMessages: 873, ... }, topTopics, ... }
+
+console.log(formatReport(report))
+```
+
+### 技能集成方式
+
+| 技能 | 集成机制 |
+|------|---------|
+| `/session-search` | SKILL.md: `command-dispatch: tool` → `command-tool: Bash` |
+| `/conversation-analyst` | 同上 |
+
+Agent 调用 `/session-search <query>` → Bash tool 执行 `node -e "import(...)"` → TS 模块运行
+
+---
+
 *最后更新: 2026-04-19*
