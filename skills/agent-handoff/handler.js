@@ -103,7 +103,7 @@ export default async function handler(args) {
   
   // Status command
   if (flags.includes('--status') || positional[0] === 'status') {
-    const name = positional[1] || positional[2] || null;
+    const name = flags.includes('--status') ? (positional[0] || null) : (positional[1] || null);
     
     if (!name) {
       return { output: 'Usage: /agent-handoff --status [agent-name]' };
@@ -126,7 +126,7 @@ export default async function handler(args) {
       `Description: ${handoff.description}`,
       `Input Filter: ${handoff.inputFilter}`,
       `Nest History: ${handoff.nestHistory ? 'Enabled' : 'Disabled'}`,
-      `Tools: ${handoff.tools.length > 0 ? handoff.tools.join(', ') : 'None'}`,
+      `Tools: ${(handoff.tools || []).length > 0 ? handoff.tools.join(', ') : 'None'} `,
       '',
       `Registered: ${new Date(handoff.registeredAt).toISOString()}`,
       `Last Updated: ${new Date(handoff.updatedAt || handoff.registeredAt).toISOString()}`,
@@ -148,7 +148,7 @@ export default async function handler(args) {
     let config;
     
     // Get config from positional args or next argument
-    const configStr = positional[1] || positional[2];
+    const configStr = flags.includes('--register') ? (positional[0] || null) : (positional[1] || null);
     
     if (configStr) {
       try {
@@ -171,7 +171,7 @@ export default async function handler(args) {
   
   // History command
   if (flags.includes('--history') || positional[0] === 'history') {
-    const limit = parseInt(positional[1] || positional[2] || '10');
+    const limit = parseInt(flags.includes('--history') ? (positional[0] || '10') : (positional[1] || '10'));
     
     const recent = data.history.slice(-limit);
     
