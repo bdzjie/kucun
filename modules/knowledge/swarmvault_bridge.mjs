@@ -35,6 +35,24 @@ const SWARM_DIR = join(homedir(), '.swarmvault');
 const CONFIG_FILE = join(SWARM_DIR, 'config.json');
 
 /**
+ * Default vault paths (in order of priority):
+ * 1. ~/Documents/swarm-vault (Windows)
+ * 2. ~/swarm-vault (Unix)
+ * 3. ~/.swarmvault
+ */
+function getDefaultVaultPath() {
+  const docPath = join(homedir(), 'Documents');
+  const docVault = join(docPath, 'swarm-vault');
+  const homeVault = join(homedir(), 'swarm-vault');
+  
+  if (existsSync(docVault)) return docVault;
+  if (existsSync(homeVault)) return homeVault;
+  if (existsSync(SWARM_DIR)) return SWARM_DIR;
+  
+  return docVault; // Default to Documents/swarm-vault
+}
+
+/**
  * Check if SwarmVault CLI is available
  */
 export function isSwarmVaultAvailable() {
@@ -99,7 +117,7 @@ function runSwarmVaultCommand(args, options = {}) {
  */
 export class SwarmVaultBridge {
   constructor(vaultPath = null) {
-    this.vaultPath = vaultPath || join(homedir(), 'swarm-vault');
+    this.vaultPath = vaultPath || getDefaultVaultPath();
     this.available = isSwarmVaultAvailable();
     this.version = this.available ? getVersion() : null;
   }
