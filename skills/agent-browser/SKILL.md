@@ -12,6 +12,7 @@ triggers:
   - "scrape a page"
   - "click a button"
   - "extract text from page"
+  - "search for"
 ---
 
 # agent-browser — Browser Automation CLI
@@ -26,6 +27,7 @@ accessibility tree with stable `@eN` refs instead of fragile CSS selectors.
 - Navigating to URLs and taking screenshots
 - Filling forms and clicking buttons
 - Extracting content from web pages (text, HTML, attributes)
+- Searching the web via Bing, Baidu, or other search engines
 - Waiting for page elements or conditions
 - Network request interception/mocking
 - Browser testing and verification
@@ -34,20 +36,30 @@ accessibility tree with stable `@eN` refs instead of fragile CSS selectors.
 **Requires:** `agent-browser` installed (`npm install -g agent-browser`) and Chrome
 downloaded (`agent-browser install`).
 
+## Domestically Accessible Search Engines (China)
+
+Since Google is not accessible in mainland China, use these alternatives:
+
+| Search Engine | URL | Notes |
+|---------------|-----|-------|
+| **Bing** | https://www.bing.com | Microsoft, clean results, recommended |
+| **Baidu** | https://www.baidu.com | Chinese language search |
+| **DuckDuckGo** | https://duckduckgo.com | Privacy-focused, international |
+| **Yandex** | https://yandex.com | Russian, good for international |
+
 ## Core Concept: Accessibility Tree with Refs
 
 Instead of fragile CSS selectors, agent-browser uses accessibility tree refs:
 
 ```
 snapshot output:
-[1] "Sign In" (button) @e1
-[2] "Email" (textbox) @e2
-[3] "Password" (textbox) @e3
-[4] "Submit" (button) @e4
+[1] "Search" (textbox) @e1
+[2] "Bing" (button) @e2
+[3] "Sign in" (link) @e3
 
-Use @e2 to reference "Email" textbox:
-agent-browser fill @e2 "test@example.com"
-agent-browser click @e4
+Use @e1 to reference the search box:
+agent-browser fill @e1 "search query"
+agent-browser press Enter
 ```
 
 ## Process
@@ -55,8 +67,8 @@ agent-browser click @e4
 ### 1. Open and Snapshot
 
 ```bash
-# Navigate to URL
-agent-browser open https://example.com
+# Navigate to URL (use Bing for search)
+agent-browser open https://www.bing.com
 
 # Get accessibility tree with refs
 agent-browser snapshot
@@ -65,7 +77,27 @@ agent-browser snapshot
 agent-browser snapshot -i
 ```
 
-### 2. Interact with Elements
+### 2. Search Example (Bing)
+
+```bash
+# Open Bing
+agent-browser open https://www.bing.com
+
+# Get snapshot to find search box
+agent-browser snapshot
+
+# Fill and search (use @e1 from snapshot output)
+agent-browser fill @e1 "your search query"
+agent-browser press Enter
+
+# Wait for results
+agent-browser wait --load networkidle
+
+# Get results
+agent-browser snapshot
+```
+
+### 3. Interact with Elements
 
 ```bash
 # Click by ref (preferred)
@@ -81,7 +113,7 @@ agent-browser type @e3 "more text"
 agent-browser press Enter
 ```
 
-### 3. Verify and Extract
+### 4. Verify and Extract
 
 ```bash
 # Get text content
@@ -97,49 +129,49 @@ agent-browser get url
 agent-browser screenshot result.png
 ```
 
-### 4. Semantic Locators (AI-Friendly)
+### 5. Semantic Locators (AI-Friendly)
 
 When you don't have a ref, use semantic locators:
 
 ```bash
 # By ARIA role
-agent-browser find role button click --name "Submit"
+agent-browser find role button click --name "Search"
 
 # By text content
 agent-browser find text "Sign In" click
 
 # By label
-agent-browser find label "Email" fill "test@example.com"
+agent-browser find label "Search" fill "query"
 
 # Nth element
 agent-browser find nth 2 "a" text
 ```
 
-### 5. Wait for Conditions
+### 6. Wait for Conditions
 
 ```bash
 # Wait for element
 agent-browser wait @e1
 
 # Wait for text
-agent-browser wait --text "Welcome"
+agent-browser wait --text "Results"
 
 # Wait for URL pattern
-agent-browser wait --url "**/dashboard"
+agent-browser wait --url "**/search?q=*"
 
 # Wait for JS condition
 agent-browser wait --fn "document.readyState === 'complete'"
 ```
 
-### 6. Batch Execution (Faster)
+### 7. Batch Execution (Faster)
 
 Execute multiple commands in one invocation:
 
 ```bash
-agent-browser batch "open https://example.com" "snapshot -i" "click @e1" "screenshot"
+agent-browser batch "open https://www.bing.com" "snapshot -i" "fill @e1 AI agents" "press Enter" "wait --load networkidle" "screenshot results.png"
 ```
 
-### 7. Network Control
+### 8. Network Control
 
 ```bash
 # Mock API response
@@ -150,6 +182,23 @@ agent-browser network route "**/analytics/**" --abort
 
 # View requests
 agent-browser network requests --filter api
+```
+
+### 9. Multi-Tab Workflow
+
+```bash
+# Open search in new tab
+agent-browser tab new --label search https://www.bing.com
+
+# Switch to search tab
+agent-browser tab search
+
+# Open another site
+agent-browser tab new --label docs https://docs.example.com
+
+# Switch between tabs
+agent-browser tab search
+agent-browser tab docs
 ```
 
 ## Common Rationalizations
@@ -211,11 +260,11 @@ executable_path = "C:\\Users\\<USER>\\.agent-browser\\browsers\\chrome-<VERSION>
 Or use the `--executable-path` flag:
 
 ```bash
-agent-browser --executable-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" open https://example.com
+agent-browser --executable-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" open https://www.bing.com
 ```
 
 **Auto-connect** to a running Chrome instance:
 
 ```bash
-agent-browser --auto-connect open https://example.com
+agent-browser --auto-connect open https://www.bing.com
 ```
