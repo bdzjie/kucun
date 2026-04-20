@@ -252,11 +252,9 @@ function handlePromptAlerts(content, alerts, senderName, sessionKey) {
 
 async function onAgentBootstrap(event) {
   const { sessionKey, workspaceDir } = event.context || {};
-  console.log(`[memory-hook] agent:bootstrap session=${sessionKey}`);
   try {
     const l0 = getL0Content();
     if (event.messages) event.messages.push(`[Memory L0] ${l0}`);
-    console.log(`[memory-hook] Injected L0: ${l0.slice(0, 60)}`);
   } catch (e) {
     console.warn('[memory-hook] L0 injection failed:', e.message);
   }
