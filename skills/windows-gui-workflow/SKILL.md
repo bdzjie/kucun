@@ -7,7 +7,9 @@ metadata:
     command-dispatch: tool
     command-tool: Bash
     command-arg-mode: raw
----
+---  triggers:
+    - /windows gui workflow
+
 
 # windows-gui-workflow — Multi-Step GUI Automation
 

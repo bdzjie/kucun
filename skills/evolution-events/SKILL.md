@@ -13,6 +13,10 @@ metadata:
       - skill audit
 ---
 
+triggers:
+  - evolution events
+  - track agent evolution
+
 # Evolution Events — Audit Trail
 
 View the EvolutionEvent audit trail (Evolver-inspired). Records every skill creation attempt, success or blocked.

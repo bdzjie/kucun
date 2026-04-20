@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: |
+|
   OpenClaw Git 工作流技能。
   
   当用户提及以下任务时使用：
@@ -31,6 +31,12 @@ metadata:
   tags: [git, version-control, automation]
   created: 2026-02-26
 ---
+triggers:
+  - /git commit
+  - push to remote
+  - git workflow
+  - manage git repos
+
 
 # Git 工作流技能
 

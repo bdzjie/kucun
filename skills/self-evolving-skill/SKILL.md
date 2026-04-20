@@ -1,9 +1,15 @@
 ---
 name: Self-Evolving Skill
-description: Meta-cognitive self-learning system - Automated skill evolution based on predictive coding and value-driven mechanisms.
+Meta-cognitive self-learning system - Automated skill evolution based on predictive coding and value-driven mechanisms.
 homepage: https://github.com/whtoo/self-evolving-bot
 
 ---
+triggers:
+  - evolve skill
+  - skill self-improvement
+  - meta-cognitive
+  - predictive coding
+
 
 
 # Self-Evolving Skill

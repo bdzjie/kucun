@@ -1,6 +1,6 @@
 ---
 name: clawcore
-description: Core system enhancements inspired by Claude Code architecture. Implements permission context, token budget management, tool registry, and multi-agent coordination patterns. Use when you need to design or improve OpenClaw's core systems.
+Core system enhancements inspired by Claude Code architecture. Implements permission context, token budget management, tool registry, and multi-agent coordination patterns. Use when you need to design or improve OpenClaw's core systems.
 metadata:
   {
     "openclaw": {
@@ -10,6 +10,12 @@ metadata:
     }
   }
 ---
+triggers:
+  - design openclaw core system
+  - improve openclaw architecture
+  - implement permission context
+  - token budget management
+
 
 # ClawCore - OpenClaw 核心系统增强
 

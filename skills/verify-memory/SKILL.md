@@ -1,6 +1,6 @@
 ---
 name: verify-memory
-description: "Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired)."
+"Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired)."
 user-invocable: true
 metadata:
   openclaw:
@@ -8,6 +8,13 @@ metadata:
     command-tool: Bash
     command-arg-mode: raw
 ---
+triggers:
+  - /verify-memory
+  - verify memory authenticity
+  - watermark check
+  triggers:
+    - /verify memory
+
 
 # verify-memory — Memory Watermark Verification
 

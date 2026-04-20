@@ -7,7 +7,9 @@ metadata:
     command-dispatch: tool
     command-tool: Bash
     command-arg-mode: raw
----
+---  triggers:
+    - /provider fallback
+
 
 # provider-fallback — Multi-Provider Chat with Fallback
 

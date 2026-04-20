@@ -1,13 +1,19 @@
 ---
 name: git-workflow-cn
 version: 1.0.0
-description: Git 工作流助手 - 分支管理、冲突解决、提交规范。适合：开发者、团队协作。
+Git 工作流助手 - 分支管理、冲突解决、提交规范。适合：开发者、团队协作。
 metadata:
   openclaw:
     emoji: "🌳"
     requires:
       bins: ["git"]
 ---
+triggers:
+  - 提交代码
+  - 推送远程
+  - Git 工作流
+  - 分支管理
+
 
 # Git 工作流助手 Skill
 

@@ -7,7 +7,9 @@ metadata:
     command-dispatch: tool
     command-tool: Bash
     command-arg-mode: raw
----
+---  triggers:
+    - /session replay
+
 
 # session-replay — Past Experience Replay
 

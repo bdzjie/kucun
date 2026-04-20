@@ -1,6 +1,6 @@
 ---
 name: session-search
-description: "Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with snippets."
+"Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with snippets."
 user-invocable: true
 metadata:
   openclaw:
@@ -8,6 +8,13 @@ metadata:
     command-tool: Bash
     command-arg-mode: raw
 ---
+triggers:
+  - /session-search
+  - search my conversations
+  - find past sessions
+  triggers:
+    - /session search
+
 
 # session-search — Historical Conversation Search
 

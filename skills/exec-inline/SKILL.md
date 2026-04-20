@@ -7,7 +7,9 @@ metadata:
     command-dispatch: tool
     command-tool: Bash
     command-arg-mode: raw
----
+---  triggers:
+    - /exec inline
+
 
 # exec-inline — Inline Code Execution
 

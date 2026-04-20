@@ -1,7 +1,13 @@
 ---
 name: task-development-workflow
-description: TDD-first development workflow with structured planning, task tracking, and PR-based code review. Use when building software projects that require clarification phases, planning approval gates, Trello task management, test-driven development, Git branching policies, and PR feedback loops with reviewers.
+TDD-first development workflow with structured planning, task tracking, and PR-based code review. Use when building software projects that require clarification phases, planning approval gates, Trello task management, test-driven development, Git branching policies, and PR feedback loops with reviewers.
 ---
+triggers:
+  - /task-workflow
+  - tdd workflow
+  - trello board
+  - development planning
+
 
 # Task Workflow
 

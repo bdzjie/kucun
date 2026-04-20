@@ -7,7 +7,9 @@ metadata:
     command-dispatch: tool
     command-tool: Bash
     command-arg-mode: raw
----
+---  triggers:
+    - /windows gui
+
 
 # windows-gui — Windows GUI Automation
 
