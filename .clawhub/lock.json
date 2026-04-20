@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "fluid-memory": {
+      "version": "1.0.9",
+      "installedAt": 1776692774190
+    },
+    "git-workflow": {
+      "version": "1.0.0",
+      "installedAt": 1776692896250
+    },
+    "lobster-debugging": {
+      "version": "1.0.0",
+      "installedAt": 1776692898730
+    },
+    "web-scraping": {
+      "version": "1.0.0",
+      "installedAt": 1776693854449
+    },
+    "windows-gui-automation-cn": {
+      "version": "1.0.0",
+      "installedAt": 1776694096602
+    },
+    "self-evolving-skill": {
+      "version": "1.0.2",
+      "installedAt": 1776694954564
+    },
+    "skill-creator-operator": {
+      "version": "1.0.1",
+      "installedAt": 1776695314039
+    },
+    "task-development-workflow": {
+      "version": "1.0.0",
+      "installedAt": 1776695716519
+    },
+    "e2e-testing-patterns": {
+      "version": "1.0.0",
+      "installedAt": 1776696144420
+    }
+  }
+}
