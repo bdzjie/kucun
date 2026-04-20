@@ -32,6 +32,27 @@ def extract_first_paragraph(content):
             return text[:300]
     return ""
 
+def extract_body_field(content: str, field: str) -> list:
+    """Extract list items from markdown body after frontmatter."""
+    fm_pattern = r'^---\n.*?\n---\n'
+    match = re.match(fm_pattern, content, re.DOTALL)
+    body = content[match.end():] if match else content
+    
+    # Find field section
+    section_pattern = r'^' + field + r':\s*\n((?:\s*-\s*.+\n)+)'
+    m = re.search(section_pattern, body, re.MULTILINE)
+    if not m:
+        return []
+    
+    items = []
+    for line in m.group(1).split('\n'):
+        lm = re.match(r'^\s*-\s*(.+)', line)
+        if lm:
+            t = lm.group(1).strip().strip('"').strip("'")
+            if t:
+                items.append(t)
+    return items
+
 def scan_skills():
     skills = []
     for skill_dir in SKILLS_DIR.iterdir():
@@ -49,16 +70,25 @@ def scan_skills():
         fm = extract_frontmatter(content)
         
         # Get description
-        desc = fm.get('description', '') or extract_first_paragraph(content)
+        desc_raw = fm.get('description', '') or ''
+        if isinstance(desc_raw, str):
+            desc = re.sub(r'^>\s*', '', desc_raw, flags=re.MULTILINE)
+            desc = desc.strip()
+        else:
+            desc = str(desc_raw)
         desc = re.sub(r'\s+', ' ', desc).strip()[:200]
         
-        # Get triggers (list or inline)
+        # Get triggers (check fm AND body)
         triggers = []
         t = fm.get('triggers', [])
         if isinstance(t, list):
             triggers = [str(x).strip() for x in t if x]
         elif isinstance(t, str):
             triggers = [x.strip() for x in re.split(r'[,;]', t) if x.strip()]
+        
+        # Also check body for triggers
+        if not triggers:
+            triggers = extract_body_field(content, 'triggers')
         
         # Get references
         references = []

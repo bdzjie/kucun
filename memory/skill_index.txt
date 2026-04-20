@@ -1,41 +1,44 @@
 agent-browser | agent-browser | /browser | open a website | fill a form | take a screenshot | scrape a page
-agent-configurable-skill | agent-configurable-skill | —
-agent-handoff | agent-handoff | —
+agent-configurable-skill | agent-configurable-skill | use {skill-name} as a tool | delegate to {skill-name} agent | call {skill-name} skill
+agent-handoff | agent-handoff | /agent-handoff --list | /agent-handoff --status [name] | /agent-handoff --register [config]
 agent-teams | agent-teams | —
-clawcore | clawcore | —
+clawcore | clawcore | design openclaw core system | improve openclaw architecture | implement permission context | token budget management
 code-review | code-review | /review | review this code | pull request | merge request | look at this change
-conversation-analyst | conversation-analyst | —
+conversation-analyst | conversation-analyst | /conversation-analyst | analyze my conversations | conversation patterns | usage analytics
 debugging | debugging | /debug | tests are failing | build is broken | this doesn't work | error in logs
-e2e-testing-patterns | e2e-testing-patterns | —
-evolution-events | evolution-events | —
+e2e-testing-patterns | e2e-testing-patterns | write e2e tests | playwright test | cypress test | end-to-end test
+evolution-events | evolution-events | evolution events | track agent evolution
 exec-inline | exec-inline | —
-fluid-memory | fluid-memory | —
-git-workflow | git-workflow | —
-git-workflow-cn | git-workflow-cn | —
-guardrail-config | guardrail-config | —
-lifecycle-tracing | lifecycle-tracing | —
-lobster-debugging | lobster-debugging | —
+fluid-memory | fluid-memory | forget memories | memory decay | ebbinghaus forgetting curve | fluid memory
+gateway-rpc | Gateway RPC Reference | gateway rpc | openclaw gateway call | gateway methods | rpc api
+git-workflow | git-workflow | /git commit | push to remote | git workflow | manage git repos
+git-workflow-cn | git-workflow-cn | 提交代码 | 推送远程 | Git 工作流 | 分支管理
+guardrail-config | guardrail-config | /guardrail-config --list | /guardrail-config --status [name] | /guardrail-config --enable [name] | /guardrail-config --disable [name] | /guardrail-config --add [config]
+lifecycle-tracing | lifecycle-tracing | /lifecycle-tracing --status | /lifecycle-tracing --spans [trace-id] | /lifecycle-tracing --enable | /lifecycle-tracing --disable
+lobster-debugging | lobster-debugging | root cause analysis | debugging framework | 4-phase debug | defense in depth
 memory-assistant | memory-assistant | /memory-assistant --query <text> | /memory-assistant --status | /memory-assistant --graph [--mermaid] | /memory-assistant --provenance <entry-id> | /memory-assistant --core [--export|--import <path>]
 obsidian-knowledge | obsidian-knowledge | —
-ontology | ontology | —
+ontology | ontology | remember | what do you know about | knowledge graph | link entities | ontological
 pref_61e6a00a | pref_61e6a00a | —
 proactive-memory | proactive-memory | —
 provider-fallback | provider-fallback | —
 sandbox-config | sandbox-config | —
-self-evolving-skill | Self-Evolving Skill | —
-session-compactor | session-compactor | —
-session-manager | session-manager | —
+self-evolving-skill | Self-Evolving Skill | evolve skill | skill self-improvement | meta-cognitive | predictive coding
+session-compactor | session-compactor | /session-compactor [session-id] [--mode auto|aggressive|conservative|summary]
+session-manager | session-manager | /session-manager --list | /session-manager --show [session-id] | /session-manager --history [session-id] | /session-manager --snapshot [session-id] | /session-manager --restore [session-id] [snapshot-id]
 session-replay | session-replay | —
-session-search | session-search | —
-skill-creator-operator | skill-creator-operator | —
+session-search | session-search | /session-search | search my conversations | find past sessions
+skill-creator-operator | skill-creator-operator | /create skill | create a skill | author a skill | skill creator operator
 skill-evolution | skill-evolution | —
 spec-driven | spec-driven | /spec | start a new project | build something from scratch | write a spec | requirements are unclear
+studio | studio | /studio | system dashboard | gateway status | openclaw status | system health
 swarmvault | swarmvault | —
-task-development-workflow | task-development-workflow | —
+task-development-workflow | task-development-workflow | /task-workflow | tdd workflow | trello board | development planning
 tdd | tdd | /test | write tests first | test-driven | fixing a bug | implementing logic
-tools-to-final-output | tools-to-final-output | —
-verify-memory | verify-memory | —
-web-scraping | web-scraping | —
+tools-to-final-output | tools-to-final-output | /tools-to-final-output --register [tool-name] | /tools-to-final-output --list | /tools-to-final-output --unregister [tool-name] | /tools-to-final-output --test [tool-name] [input]
+verify-memory | verify-memory | /verify-memory | verify memory authenticity | watermark check
+web-scraping | web-scraping | /scrape | scrape website | extract data from | web scraping
+what-am-i-working-on | what am i working on | what am i working on | what am i doing | show my tasks | project status | progress report
 windows-gui | windows-gui | —
-windows-gui-automation-cn | Windows GUI 自动化集成 (中文) | —
+windows-gui-automation-cn | windows-gui-automation-cn | Windows GUI 自动化 | 打开应用 | 点击按钮 | PyAutoGUI
 windows-gui-workflow | windows-gui-workflow | —

@@ -1,6 +1,6 @@
 {
   "generated": "2026-04-20T14:58:00Z",
-  "total": 41,
+  "total": 44,
   "skills": [
     {
       "id": "agent-browser",
@@ -28,7 +28,11 @@
       "id": "agent-configurable-skill",
       "name": "agent-configurable-skill",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "use {skill-name} as a tool",
+        "delegate to {skill-name} agent",
+        "call {skill-name} skill"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -38,7 +42,11 @@
       "id": "agent-handoff",
       "name": "agent-handoff",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/agent-handoff --list",
+        "/agent-handoff --status [name]",
+        "/agent-handoff --register [config]"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -58,7 +66,12 @@
       "id": "clawcore",
       "name": "clawcore",
       "description": "Core system enhancements inspired by Claude Code architecture. Implements permission context, token budget management, tool registry, and multi-agent coordination patterns. Use when you need to design",
-      "triggers": [],
+      "triggers": [
+        "design openclaw core system",
+        "improve openclaw architecture",
+        "implement permission context",
+        "token budget management"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -83,8 +96,13 @@
     {
       "id": "conversation-analyst",
       "name": "conversation-analyst",
-      "description": "Analyze conversation history patterns and generate structured reports. Usage: /conversation-analyst — asks for a full analytics report including activity stats, engagement quality, top topics, and too",
-      "triggers": [],
+      "description": "\"Analyze conversation history patterns and generate structured reports. Usage: /conversation-analyst — asks for a full analytics report including activity stats, engagement quality, top topics, and to",
+      "triggers": [
+        "/conversation-analyst",
+        "analyze my conversations",
+        "conversation patterns",
+        "usage analytics"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -111,8 +129,13 @@
     {
       "id": "e2e-testing-patterns",
       "name": "e2e-testing-patterns",
-      "description": "Build reliable, fast E2E test suites with Playwright and Cypress. Critical user journey coverage, flaky test elimination, CI/CD integration.",
-      "triggers": [],
+      "description": "",
+      "triggers": [
+        "write e2e tests",
+        "playwright test",
+        "cypress test",
+        "end-to-end test"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -122,7 +145,10 @@
       "id": "evolution-events",
       "name": "evolution-events",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "evolution events",
+        "track agent evolution"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -142,17 +168,42 @@
       "id": "fluid-memory",
       "name": "fluid-memory",
       "description": "基于艾宾浩斯遗忘曲线和访问频率的衰减模型设计的遗忘和归档机制，完全依赖openclaw原生记忆系统的拟人化流体记忆系统",
-      "triggers": [],
+      "triggers": [
+        "forget memories",
+        "memory decay",
+        "ebbinghaus forgetting curve",
+        "fluid memory"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
       "path": "skills\\fluid-memory"
     },
     {
+      "id": "gateway-rpc",
+      "name": "Gateway RPC Reference",
+      "description": "Complete reference for OpenClaw Gateway RPC methods",
+      "triggers": [
+        "gateway rpc",
+        "openclaw gateway call",
+        "gateway methods",
+        "rpc api"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\gateway-rpc"
+    },
+    {
       "id": "git-workflow",
       "name": "git-workflow",
-      "description": "OpenClaw Git 工作流技能。 当用户提及以下任务时使用： - 提交代码或文档 - 推送到远程仓库 - 管理多个 Git 仓库 - 查看 Git 状态 核心能力: - 自动检测文件变更 - 自动生成提交信息 - 自动推送到远程仓库 - 多仓库管理",
-      "triggers": [],
+      "description": "| OpenClaw Git 工作流技能。 当用户提及以下任务时使用： - 提交代码或文档 - 推送到远程仓库 - 管理多个 Git 仓库 - 查看 Git 状态 核心能力: - 自动检测文件变更 - 自动生成提交信息 - 自动推送到远程仓库 - 多仓库管理",
+      "triggers": [
+        "/git commit",
+        "push to remote",
+        "git workflow",
+        "manage git repos"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -161,8 +212,13 @@
     {
       "id": "git-workflow-cn",
       "name": "git-workflow-cn",
-      "description": "Git 工作流助手 - 分支管理、冲突解决、提交规范。适合：开发者、团队协作。",
-      "triggers": [],
+      "description": "",
+      "triggers": [
+        "提交代码",
+        "推送远程",
+        "Git 工作流",
+        "分支管理"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -172,7 +228,13 @@
       "id": "guardrail-config",
       "name": "guardrail-config",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/guardrail-config --list",
+        "/guardrail-config --status [name]",
+        "/guardrail-config --enable [name]",
+        "/guardrail-config --disable [name]",
+        "/guardrail-config --add [config]"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -182,7 +244,12 @@
       "id": "lifecycle-tracing",
       "name": "lifecycle-tracing",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/lifecycle-tracing --status",
+        "/lifecycle-tracing --spans [trace-id]",
+        "/lifecycle-tracing --enable",
+        "/lifecycle-tracing --disable"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -191,8 +258,13 @@
     {
       "id": "lobster-debugging",
       "name": "lobster-debugging",
-      "description": "Systematic debugging framework. 4-phase root-cause analysis with defense-in-depth. Never guess, never patch symptoms. From Claude Code + Superpowers.",
-      "triggers": [],
+      "description": "",
+      "triggers": [
+        "root cause analysis",
+        "debugging framework",
+        "4-phase debug",
+        "defense in depth"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -233,7 +305,13 @@
       "id": "ontology",
       "name": "ontology",
       "description": "Typed knowledge graph for structured agent memory and composable skills. Use when creating/querying entities (Person, Project, Task, Event, Document), linking related objects, enforcing constraints, p",
-      "triggers": [],
+      "triggers": [
+        "remember",
+        "what do you know about",
+        "knowledge graph",
+        "link entities",
+        "ontological"
+      ],
       "references": [
         "queries.md",
         "schema.md"
@@ -288,7 +366,12 @@
       "id": "self-evolving-skill",
       "name": "Self-Evolving Skill",
       "description": "Meta-cognitive self-learning system - Automated skill evolution based on predictive coding and value-driven mechanisms.",
-      "triggers": [],
+      "triggers": [
+        "evolve skill",
+        "skill self-improvement",
+        "meta-cognitive",
+        "predictive coding"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
@@ -298,7 +381,9 @@
       "id": "session-compactor",
       "name": "session-compactor",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/session-compactor [session-id] [--mode auto|aggressive|conservative|summary]"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -308,7 +393,13 @@
       "id": "session-manager",
       "name": "session-manager",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/session-manager --list",
+        "/session-manager --show [session-id]",
+        "/session-manager --history [session-id]",
+        "/session-manager --snapshot [session-id]",
+        "/session-manager --restore [session-id] [snapshot-id]"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -327,8 +418,12 @@
     {
       "id": "session-search",
       "name": "session-search",
-      "description": "Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with sn",
-      "triggers": [],
+      "description": "\"Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with s",
+      "triggers": [
+        "/session-search",
+        "search my conversations",
+        "find past sessions"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -337,8 +432,13 @@
     {
       "id": "skill-creator-operator",
       "name": "skill-creator-operator",
-      "description": "Premium Skill Creator by Kevin Jeppesen (The Operator Vault). Create better OpenClaw skills with a premium first-use setup wizard pattern, minimal context bloat, and reusable scaffolding. Links: YouTu",
-      "triggers": [],
+      "description": "\"Premium Skill Creator by Kevin Jeppesen (The Operator Vault). Create better OpenClaw skills with a premium first-use setup wizard pattern, minimal context bloat, and reusable scaffolding. Links: YouT",
+      "triggers": [
+        "/create skill",
+        "create a skill",
+        "author a skill",
+        "skill creator operator"
+      ],
       "references": [
         "LINKS.md",
         "OVERVIEW.md",
@@ -377,6 +477,22 @@
       "path": "skills\\spec-driven"
     },
     {
+      "id": "studio",
+      "name": "studio",
+      "description": "OpenClaw system dashboard and control center. Query gateway health, cost, sessions, cron jobs, skills, and tasks via RPC API. Use for system overview, debugging, or control.",
+      "triggers": [
+        "/studio",
+        "system dashboard",
+        "gateway status",
+        "openclaw status",
+        "system health"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\studio"
+    },
+    {
       "id": "swarmvault",
       "name": "swarmvault",
       "description": "",
@@ -390,7 +506,12 @@
       "id": "task-development-workflow",
       "name": "task-development-workflow",
       "description": "TDD-first development workflow with structured planning, task tracking, and PR-based code review. Use when building software projects that require clarification phases, planning approval gates, Trello",
-      "triggers": [],
+      "triggers": [
+        "/task-workflow",
+        "tdd workflow",
+        "trello board",
+        "development planning"
+      ],
       "references": [
         "workflow-details.md"
       ],
@@ -419,7 +540,12 @@
       "id": "tools-to-final-output",
       "name": "tools-to-final-output",
       "description": "",
-      "triggers": [],
+      "triggers": [
+        "/tools-to-final-output --register [tool-name]",
+        "/tools-to-final-output --list",
+        "/tools-to-final-output --unregister [tool-name]",
+        "/tools-to-final-output --test [tool-name] [input]"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -428,8 +554,12 @@
     {
       "id": "verify-memory",
       "name": "verify-memory",
-      "description": "Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired).",
-      "triggers": [],
+      "description": "\"Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired).\"",
+      "triggers": [
+        "/verify-memory",
+        "verify memory authenticity",
+        "watermark check"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": true,
@@ -439,11 +569,33 @@
       "id": "web-scraping",
       "name": "web-scraping",
       "description": "Extract structured information from websites using web_fetch for simple pages and browser automation for dynamic sites, login-gated flows, pagination, infinite scroll, or pages that require clicking/s",
-      "triggers": [],
+      "triggers": [
+        "/scrape",
+        "scrape website",
+        "extract data from",
+        "web scraping"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
       "path": "skills\\web-scraping"
+    },
+    {
+      "id": "what-am-i-working-on",
+      "name": "what am i working on",
+      "description": "Query the ontology knowledge graph to report current project and task status. Use when asked \"what am I working on\", \"status\", \"progress\", or \"show me my tasks\".",
+      "triggers": [
+        "what am i working on",
+        "what am i doing",
+        "show my tasks",
+        "project status",
+        "progress report",
+        "what are my active projects"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\what-am-i-working-on"
     },
     {
       "id": "windows-gui",
@@ -457,9 +609,14 @@
     },
     {
       "id": "windows-gui-automation-cn",
-      "name": "Windows GUI 自动化集成 (中文)",
-      "description": "开箱即用的Windows桌面GUI自动化集成技能，整合原生UI自动化、鼠标控制、截图识别、AI视觉分析，一站式解决Windows桌面自动化需求。支持打开应用、点击、输入、截图、OCR识别、流程自动化。",
-      "triggers": [],
+      "name": "windows-gui-automation-cn",
+      "description": "",
+      "triggers": [
+        "Windows GUI 自动化",
+        "打开应用",
+        "点击按钮",
+        "PyAutoGUI"
+      ],
       "references": [],
       "scripts": [],
       "has_handler": false,
