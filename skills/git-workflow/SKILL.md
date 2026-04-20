@@ -1,6 +1,7 @@
 ---
 name: git-workflow
-|
+description: >
+  |
   OpenClaw Git 工作流技能。
   
   当用户提及以下任务时使用：

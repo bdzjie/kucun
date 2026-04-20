@@ -1,6 +1,7 @@
 ---
 name: verify-memory
-"Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired)."
+description: >
+  "Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired)."
 user-invocable: true
 metadata:
   openclaw:

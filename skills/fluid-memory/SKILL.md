@@ -1,6 +1,7 @@
 ---
 name: fluid-memory
-基于艾宾浩斯遗忘曲线和访问频率的衰减模型设计的遗忘和归档机制，完全依赖openclaw原生记忆系统的拟人化流体记忆系统
+description: >
+  基于艾宾浩斯遗忘曲线和访问频率的衰减模型设计的遗忘和归档机制，完全依赖openclaw原生记忆系统的拟人化流体记忆系统
 command-dispatch: tool
 metadata:
   {

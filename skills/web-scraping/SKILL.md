@@ -1,6 +1,7 @@
 ---
 name: web-scraping
-Extract structured information from websites using web_fetch for simple pages and browser automation for dynamic sites, login-gated flows, pagination, infinite scroll, or pages that require clicking/searching/filtering. Use when the user asks to scrape a site, collect listings, gather fields from many pages, monitor website changes, or turn webpage content into structured summaries/JSON/CSV.
+description: >
+  Extract structured information from websites using web_fetch for simple pages and browser automation for dynamic sites, login-gated flows, pagination, infinite scroll, or pages that require clicking/searching/filtering. Use when the user asks to scrape a site, collect listings, gather fields from many pages, monitor website changes, or turn webpage content into structured summaries/JSON/CSV.
 ---
 triggers:
   - /scrape

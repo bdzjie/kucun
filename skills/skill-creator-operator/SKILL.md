@@ -1,6 +1,7 @@
 ---
 name: skill-creator-operator
-"Premium Skill Creator by Kevin Jeppesen (The Operator Vault). Create better OpenClaw skills with a premium first-use setup wizard pattern, minimal context bloat, and reusable scaffolding. Links: YouTube https://www.youtube.com/@kevin-jeppesen | Skool https://skool.com/operator-vault | Site https://theoperatorvault.io | X https://x.com/seo_ecom | LinkedIn https://www.linkedin.com/in/kevin-jeppesen/ | Facebook https://www.facebook.com/kevinjeppesen/"
+description: >
+  "Premium Skill Creator by Kevin Jeppesen (The Operator Vault). Create better OpenClaw skills with a premium first-use setup wizard pattern, minimal context bloat, and reusable scaffolding. Links: YouTube https://www.youtube.com/@kevin-jeppesen | Skool https://skool.com/operator-vault | Site https://theoperatorvault.io | X https://x.com/seo_ecom | LinkedIn https://www.linkedin.com/in/kevin-jeppesen/ | Facebook https://www.facebook.com/kevinjeppesen/"
 ---
 triggers:
   - /create skill

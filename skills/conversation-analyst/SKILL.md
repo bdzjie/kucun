@@ -1,6 +1,7 @@
 ---
 name: conversation-analyst
-"Analyze conversation history patterns and generate structured reports. Usage: /conversation-analyst — asks for a full analytics report including activity stats, engagement quality, top topics, and tool usage patterns."
+description: >
+  "Analyze conversation history patterns and generate structured reports. Usage: /conversation-analyst — asks for a full analytics report including activity stats, engagement quality, top topics, and tool usage patterns."
 user-invocable: true
 metadata:
   openclaw:

@@ -23,6 +23,25 @@ def extract_frontmatter(content: str) -> dict:
     except:
         return {}
 
+def extract_body_triggers(content: str) -> list:
+    """Extract triggers from markdown body (after frontmatter)."""
+    # Remove frontmatter
+    match = re.match(r'^---\n.*?\n---\n', content, re.DOTALL)
+    body = content[match.end():] if match else content
+    
+    # Find triggers section: triggers:
+    triggers = []
+    trigger_match = re.search(r'^triggers:\s*\n((?:\s*-\s*.+\n)+)', body, re.MULTILINE)
+    if trigger_match:
+        for line in trigger_match.group(1).split('\n'):
+            m = re.match(r'^\s*-\s*(.+)', line)
+            if m:
+                t = m.group(1).strip().strip('"').strip("'")
+                if t:
+                    triggers.append(t)
+    
+    return triggers
+
 def audit_skill(skill_dir: Path) -> dict:
     """Audit a single skill directory"""
     skill_md = skill_dir / "SKILL.md"
@@ -53,13 +72,18 @@ def audit_skill(skill_dir: Path) -> dict:
         issues.append("Description too long (>600 chars)")
         score -= 5
     
-    # Triggers
+    # Triggers (check frontmatter AND body)
     triggers = []
     t = fm.get('triggers', [])
     if isinstance(t, list):
         triggers = [str(x).strip() for x in t if x]
     elif isinstance(t, str):
         triggers = [x.strip() for x in re.split(r'[,;]', t) if x.strip()]
+    
+    # Also check body for triggers (after frontmatter)
+    body_triggers = extract_body_triggers(content)
+    if body_triggers:
+        triggers = body_triggers
     
     if not triggers:
         issues.append("No triggers defined")
@@ -74,9 +98,11 @@ def audit_skill(skill_dir: Path) -> dict:
         issues.append("No handler.js or references/")
         score -= 10
     
-    # Count other files
+    # Count other files (include directories that aren't empty)
     files = [f for f in skill_dir.iterdir() if f.is_file() and f.name != 'SKILL.md']
-    if len(files) == 0:
+    dirs = [d for d in skill_dir.iterdir() if d.is_dir() and d.name not in ['.git', 'node_modules']]
+    non_empty_dirs = [d for d in dirs if any(True for _ in d.iterdir())]
+    if len(files) == 0 and len(non_empty_dirs) == 0:
         issues.append("No supporting files")
         score -= 5
     

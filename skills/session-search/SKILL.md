@@ -1,6 +1,7 @@
 ---
 name: session-search
-"Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with snippets."
+description: >
+  "Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with snippets."
 user-invocable: true
 metadata:
   openclaw:

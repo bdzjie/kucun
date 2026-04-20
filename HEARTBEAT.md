@@ -61,6 +61,12 @@
 **触发**：上次检查 > 48 小时前
 **主动行为**：更新了重要记忆时汇报
 
+**Ontology 集成**：
+- `memory/ontology/graph.jsonl` 存储项目/任务状态
+- `modules/ontology_task_update.py` 更新任务状态
+- `modules/ontology.py` 查询知识图谱
+- 任务完成后自动更新：`python modules/ontology_task_update.py done <task_id>`
+
 ### 5. git_status（每 12 小时）
 
 检查 workspace git 状态，看是否有未提交的变更。
@@ -70,13 +76,25 @@
 
 ### 6. skills_health（每 72 小时）
 
-审计 skills 安全性和健康度：
-1. 检查新安装的 skills 是否有恶意模式
-2. 检查 skills 是否需要更新
-3. 检查 Evolution System 是否有待处理变体
+审计 skills 安全性和健康度（使用 `audit_skills.py`）：
+1. 运行 `python modules/audit_skills.py --json` 获取质量评分
+2. 检查平均分是否低于 70
+3. 检查缺失 triggers 的 skills
+4. 严重问题时提醒用户
 
 **触发**：上次检查 > 72 小时前
-**主动行为**：发现问题 skills 时提醒
+**主动行为**：
+- 平均分 < 70 或缺失 triggers > 10 → 提醒并给出修复命令
+- 运行 `python scripts/heartbeat_skills_health.py` 获取结构化报告
+
+**自动修复**：
+```bash
+# 修复 frontmatter（添加缺失的 description: >）
+python modules/fix_frontmatter.py --fix
+
+# 批量添加 triggers
+python modules/add_triggers.py
+```
 
 ### 7. proactive_memory（每 2 小时）
 
