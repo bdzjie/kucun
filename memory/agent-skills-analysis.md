@@ -333,3 +333,228 @@ Severity labels: Nit/Optional/FYI
 ---
 
 *最后更新: 2026-04-20*
+
+---
+
+## 12:20 GitHub Research — vercel-labs/agent-browser
+
+Repo: `vercel-labs/agent-browser` | Rust CLI | Browser automation for AI agents
+Docs: https://github.com/vercel-labs/agent-browser
+
+### 定位
+
+Native Rust CLI for browser automation. 核心创新：Accessibility Tree with Refs（AI友好的元素引用系统）。
+
+### 核心架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ agent-browser (Rust CLI)                                     │
+│                                                              │
+│  install → Download Chrome from Chrome for Testing           │
+│  open <url> → Launch browser                                 │
+│  snapshot → Get accessibility tree with @e1, @e2, @e3 refs   │
+│  click @e2 → Click by reference (no fragile selectors)     │
+│  close → Clean shutdown                                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 核心创新：Accessibility Tree + Refs
+
+```bash
+# snapshot 输出示例
+[1]  "Sign In" (button, disabled) @e1
+[2]  "Email" (textbox) @e2
+[3]  "Password" (textbox) @e3
+[4]  "Submit" (button) @e4
+
+# AI 使用 @e2 引用而非 CSS 选择器
+agent-browser fill @e2 "test@example.com"
+agent-browser click @e4
+```
+
+**优势**：
+- 无需 CSS 选择器（不怕页面结构变化）
+- AI 可读性强（accessibility tree 语义清晰）
+- Refs 稳定（元素重新渲染后 ref 可能变化，但有 `@eN` 约定）
+
+### 关键能力矩阵
+
+| 能力 | 命令 | 说明 |
+|------|------|------|
+| 导航 | `open <url>` | 访问 URL |
+| 快照 | `snapshot [-i]` | 无障碍树（含 refs），`-i` 交互式 |
+| 点击 | `click @e2` | 通过 ref 点击 |
+| 填写 | `fill @e3 "text"` | 清空并填写 |
+| 输入 | `type @e3 "text"` | 追加输入 |
+| 截图 | `screenshot [--annotate]` | 标注版带编号 |
+| 等待 | `wait --text "Welcome"` | 文本/URL/条件等待 |
+| 批量 | `batch "cmd1" "cmd2" "cmd3"` | 批量执行减少启动开销 |
+| 差分 | `diff snapshot/screenshot` | 快照/截图对比 |
+| Chat | `chat "自然语言指令"` | AI 自然语言控制 |
+
+### 语义定位器（AI-Friendly）
+
+```bash
+# 不用 CSS，用语义
+agent-browser find role button click --name "Submit"
+agent-browser find text "Sign In" click
+agent-browser find label "Email" fill "test@test.com"
+agent-browser find nth 2 "a" text
+```
+
+### 网络控制
+
+```bash
+agent-browser network route <url> --abort      # 阻止请求
+agent-browser network route <url> --body <json> # Mock 响应
+agent-browser network requests --filter api     # 查看请求
+agent-browser network har start/stop           # HAR 录制
+```
+
+### Tab 管理
+
+```bash
+agent-browser tab new --label docs https://...  # 带标签的新标签页
+agent-browser tab docs                         # 按标签切换
+agent-browser tab close docs                   # 按标签关闭
+```
+
+Tab ID 格式：`t1`, `t2` — 稳定字符串，会话内不重用
+
+### Diff 功能
+
+```bash
+# 快照差分
+agent-browser diff snapshot --baseline before.txt
+
+# 截图像素差分
+agent-browser diff screenshot --baseline b.png -t 0.2
+
+# URL 对比
+agent-browser diff url https://v1.com https://v2.com --screenshot
+```
+
+### Chat 模式
+
+```bash
+# 单次自然语言控制
+agent-browser chat "Click the sign in button and fill email with test@example.com"
+
+# 交互式 REPL
+agent-browser chat
+```
+
+### 与 windows-gui skill 对比
+
+| 维度 | windows-gui (PyAutoGUI) | agent-browser |
+|------|-------------------------|---------------|
+| 平台 | Windows 专用 | 跨平台（Win/Mac/Linux）|
+| 速度 | Python，相对慢 | Rust，极快 |
+| 元素定位 | 像素坐标（脆弱）| Accessibility refs（健壮）|
+| 元素发现 | 需要坐标 | 语义定位器 + snapshot |
+| 网络控制 | 无 | 完整（mock/block/har）|
+| 截图 | 支持 | 支持 + 标注 |
+| AI 友好度 | 低（坐标）| 高（refs + chat）|
+
+### 对 OpenClaw 的启发
+
+#### 1. Accessibility Refs 模式（Priority: HIGH）
+
+agent-browser 的 `@e1/@e2` 模式非常适合 AI Agent。
+
+**OpenClaw 现状**：windows-gui 使用 PyAutoGUI 坐标，脆弱。
+
+**改进方案**：
+- 如果 `agent-browser` 可用：用它替代 windows-gui
+- 创建 `skills/agent-browser/` skill，封装 CLI
+- 保留 `windows-gui` 作为 Windows fallback
+
+#### 2. Chat 模式集成（Priority: MEDIUM）
+
+`agent-browser chat` 可以作为 browser tool 的自然语言接口。
+
+**潜在工作流**：
+```
+用户："帮我填表"
+Agent：调用 agent-browser chat "fill form with name=Qian and email=q@q.com"
+```
+
+#### 3. Batch 模式优化（Priority: MEDIUM）
+
+agent-browser 支持批量执行，减少进程启动开销。
+
+**工作流优化**：
+```bash
+# 当前：每个命令启动一次
+agent-browser open example.com
+agent-browser snapshot
+agent-browser click @e1
+
+# 优化后：批量执行
+agent-browser batch "open example.com" "snapshot -i" "click @e1"
+```
+
+#### 4. Snapshot + Annotated Screenshot（Priority: HIGH）
+
+`agent-browser snapshot` 提供的 accessibility tree 比截图更易解析。
+
+**结合 memory_provenance**：
+- 每次 browser 操作记录 snapshot 到记忆
+- 建立"页面结构知识图谱"
+
+#### 5. Diff 作为测试工具（Priority: LOW）
+
+agent-browser diff 可用于：
+- UI 变更检测
+- 截图回归测试
+- A/B 测试对比
+
+### 集成路径
+
+**Phase 1：检测和封装**
+```javascript
+// 检查 agent-browser 是否安装
+execSync('agent-browser --version')
+
+// 如果存在：创建 agent-browser skill
+// 如果不存在：回退到 windows-gui
+```
+
+**Phase 2：迁移工作流**
+- 用 `agent-browser open <url>` 替代 PyAutoGUI 坐标点击
+- 用 `snapshot` + `@eN` 替代像素定位
+- 用 `find role/text/label` 替代 CSS 选择器
+
+**Phase 3：增强功能**
+- 网络 mock 用于测试
+- Diff 用于回归检测
+- Chat 模式用于自然语言控制
+
+### 与现有模块的关系
+
+| 模块 | 关系 |
+|------|------|
+| windows-gui skill | 竞争：agent-browser 更优 |
+| memory_provenance | 补充：browser 操作可记录 snapshot |
+| sandbox-config | 补充：browser 自动化需要沙箱 |
+| proactive_memory | 补充：browser 行为可作为记忆 |
+
+### 安装状态
+
+```bash
+# macOS
+brew install agent-browser
+
+# npm (全局)
+npm install -g agent-browser
+agent-browser install
+
+# Rust 源码
+cargo install agent-browser
+agent-browser install
+```
+
+---
+
+*最后更新: 2026-04-20*
