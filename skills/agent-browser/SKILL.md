@@ -199,3 +199,23 @@ agent-browser console
 # Get CDP URL for debugging
 agent-browser get cdp-url
 ```
+
+## Windows Configuration
+
+On Windows, if Chrome is not found automatically, create `~/.agent-browser/config.toml`:
+
+```toml
+executable_path = "C:\\Users\\<USER>\\.agent-browser\\browsers\\chrome-<VERSION>\\chrome-win64\\chrome.exe"
+```
+
+Or use the `--executable-path` flag:
+
+```bash
+agent-browser --executable-path "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" open https://example.com
+```
+
+**Auto-connect** to a running Chrome instance:
+
+```bash
+agent-browser --auto-connect open https://example.com
+```
