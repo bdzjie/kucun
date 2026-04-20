@@ -1,0 +1,59 @@
+types:
+  Project:
+    required: [name, status]
+    properties:
+      name: string
+      description: string?
+      status: enum(planning, active, paused, completed, archived)
+      start_date: date?
+      end_date: date?
+      owner: ref(Person)?
+
+  Task:
+    required: [title, status]
+    properties:
+      title: string
+      description: string?
+      status: enum(open, in_progress, blocked, done, cancelled)
+      priority: enum(low, medium, high, urgent)?
+      assignee: ref(Person)?
+      project: ref(Project)?
+      due: datetime?
+      blockers: ref(Task)[]?
+
+  Person:
+    required: [name]
+    properties:
+      name: string
+      email: string?
+      role: string?
+
+  Action:
+    required: [type, target, timestamp]
+    properties:
+      type: string
+      target: ref(Entity)
+      timestamp: datetime
+      outcome: enum(success, failure, pending)?
+
+relations:
+  has_owner:
+    from_types: [Project]
+    to_types: [Person]
+    cardinality: many_to_one
+
+  part_of:
+    from_types: [Task]
+    to_types: [Project]
+    cardinality: many_to_one
+
+  assigned_to:
+    from_types: [Task]
+    to_types: [Person]
+    cardinality: many_to_one
+
+  blocks:
+    from_types: [Task]
+    to_types: [Task]
+    cardinality: many_to_many
+    acyclic: true

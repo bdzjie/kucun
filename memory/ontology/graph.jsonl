@@ -1,0 +1,24 @@
+{"op":"create","entity":{"id":"proj_claude-code","type":"Project","properties":{"name":"Claude Code 源码分析","status":"active","start_date":"2026-04-17"}}}
+{"op":"create","entity":{"id":"proj_mempalace","type":"Project","properties":{"name":"MemPalace 源码分析","status":"completed","start_date":"2026-04-18"}}}
+{"op":"create","entity":{"id":"proj_generic-agent","type":"Project","properties":{"name":"GenericAgent 源码分析","status":"completed","start_date":"2026-04-19"}}}
+{"op":"create","entity":{"id":"proj_openclaw-skills","type":"Project","properties":{"name":"OpenClaw Skills 学习","status":"active","start_date":"2026-04-20"}}}
+{"op":"create","entity":{"id":"proj_workspace-maintain","type":"Project","properties":{"name":"OpenClaw Workspace 维护","status":"active"}}}
+{"op":"create","entity":{"id":"task_claude-code-arch","type":"Task","properties":{"title":"Claude Code 架构分析","status":"completed","project":"proj_claude-code"}}}
+{"op":"create","entity":{"id":"task_mempalace-arch","type":"Task","properties":{"title":"MemPalace 架构分析","status":"completed","project":"proj_mempalace"}}}
+{"op":"create","entity":{"id":"task_generic-agent-arch","type":"Task","properties":{"title":"GenericAgent 架构分析","status":"completed","project":"proj_generic-agent"}}}
+{"op":"create","entity":{"id":"task_clawhub-study","type":"Task","properties":{"title":"ClawHub 技能学习","status":"in_progress","project":"proj_openclaw-skills","priority":"high"}}}
+{"op":"create","entity":{"id":"task_apply-skills","type":"Task","properties":{"title":"技能应用到工作流","status":"in_progress","project":"proj_openclaw-skills","priority":"high"}}}
+{"op":"create","entity":{"id":"task_debugging-upgrade","type":"Task","properties":{"title":"调试框架升级","status":"completed","project":"proj_openclaw-skills"}}}
+{"op":"create","entity":{"id":"task_agent-browser-refactor","type":"Task","properties":{"title":"agent-browser Progressive Disclosure","status":"completed","project":"proj_openclaw-skills"}}}
+{"op":"create","entity":{"id":"task_ontology-setup","type":"Task","properties":{"title":"Ontology 知识图谱搭建","status":"in_progress","project":"proj_openclaw-skills","priority":"medium"}}}
+{"op":"create","entity":{"id":"p_administrator","type":"Person","properties":{"name":"Administrator","role":"雇主"}}}
+{"op":"relate","from":"proj_openclaw-skills","rel":"has_owner","to":"p_administrator"}
+{"op":"relate","from":"task_clawhub-study","rel":"part_of","to":"proj_openclaw-skills"}
+{"op":"relate","from":"task_apply-skills","rel":"part_of","to":"proj_openclaw-skills"}
+{"op":"relate","from":"task_debugging-upgrade","rel":"part_of","to":"proj_openclaw-skills"}
+{"op":"relate","from":"task_agent-browser-refactor","rel":"part_of","to":"proj_openclaw-skills"}
+{"op":"relate","from":"task_ontology-setup","rel":"part_of","to":"proj_openclaw-skills"}
+{"op":"relate","from":"task_ontology-setup","rel":"blocks","to":"task_apply-skills"}
+{"op":"create","entity":{"id":"a_clawhub-study","type":"Action","properties":{"type":"create","target":"task_clawhub-study","timestamp":"2026-04-20T13:30:00Z","actor":"p_administrator","outcome":"success"}}}
+{"op":"create","entity":{"id":"a_debugging-refactor","type":"Action","properties":{"type":"update","target":"task_debugging-upgrade","timestamp":"2026-04-20T22:47:00Z","actor":"p_administrator","outcome":"success"}}}
+{"op":"create","entity":{"id":"a_agent-browser-refactor","type":"Action","properties":{"type":"refactor","target":"task_agent-browser-refactor","timestamp":"2026-04-20T22:50:00Z","actor":"p_administrator","outcome":"success"}}}
