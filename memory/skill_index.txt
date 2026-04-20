@@ -1,0 +1,41 @@
+agent-browser | agent-browser | /browser | open a website | fill a form | take a screenshot | scrape a page
+agent-configurable-skill | agent-configurable-skill | —
+agent-handoff | agent-handoff | —
+agent-teams | agent-teams | —
+clawcore | clawcore | —
+code-review | code-review | /review | review this code | pull request | merge request | look at this change
+conversation-analyst | conversation-analyst | —
+debugging | debugging | /debug | tests are failing | build is broken | this doesn't work | error in logs
+e2e-testing-patterns | e2e-testing-patterns | —
+evolution-events | evolution-events | —
+exec-inline | exec-inline | —
+fluid-memory | fluid-memory | —
+git-workflow | git-workflow | —
+git-workflow-cn | git-workflow-cn | —
+guardrail-config | guardrail-config | —
+lifecycle-tracing | lifecycle-tracing | —
+lobster-debugging | lobster-debugging | —
+memory-assistant | memory-assistant | /memory-assistant --query <text> | /memory-assistant --status | /memory-assistant --graph [--mermaid] | /memory-assistant --provenance <entry-id> | /memory-assistant --core [--export|--import <path>]
+obsidian-knowledge | obsidian-knowledge | —
+ontology | ontology | —
+pref_61e6a00a | pref_61e6a00a | —
+proactive-memory | proactive-memory | —
+provider-fallback | provider-fallback | —
+sandbox-config | sandbox-config | —
+self-evolving-skill | Self-Evolving Skill | —
+session-compactor | session-compactor | —
+session-manager | session-manager | —
+session-replay | session-replay | —
+session-search | session-search | —
+skill-creator-operator | skill-creator-operator | —
+skill-evolution | skill-evolution | —
+spec-driven | spec-driven | /spec | start a new project | build something from scratch | write a spec | requirements are unclear
+swarmvault | swarmvault | —
+task-development-workflow | task-development-workflow | —
+tdd | tdd | /test | write tests first | test-driven | fixing a bug | implementing logic
+tools-to-final-output | tools-to-final-output | —
+verify-memory | verify-memory | —
+web-scraping | web-scraping | —
+windows-gui | windows-gui | —
+windows-gui-automation-cn | Windows GUI 自动化集成 (中文) | —
+windows-gui-workflow | windows-gui-workflow | —

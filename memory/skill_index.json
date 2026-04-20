@@ -1,0 +1,479 @@
+{
+  "generated": "2026-04-20T14:58:00Z",
+  "total": 41,
+  "skills": [
+    {
+      "id": "agent-browser",
+      "name": "agent-browser",
+      "description": "Browser automation via agent-browser CLI (Vercel Labs, Rust). Use when you need to navigate, screenshot, fill forms, click elements, or extract content from web pages. Requires Chrome installed via `a",
+      "triggers": [
+        "/browser",
+        "open a website",
+        "fill a form",
+        "take a screenshot",
+        "scrape a page",
+        "click a button",
+        "extract text from page",
+        "search for"
+      ],
+      "references": [
+        "commands.md",
+        "windows-config.md"
+      ],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\agent-browser"
+    },
+    {
+      "id": "agent-configurable-skill",
+      "name": "agent-configurable-skill",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\agent-configurable-skill"
+    },
+    {
+      "id": "agent-handoff",
+      "name": "agent-handoff",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\agent-handoff"
+    },
+    {
+      "id": "agent-teams",
+      "name": "agent-teams",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\agent-teams"
+    },
+    {
+      "id": "clawcore",
+      "name": "clawcore",
+      "description": "Core system enhancements inspired by Claude Code architecture. Implements permission context, token budget management, tool registry, and multi-agent coordination patterns. Use when you need to design",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\clawcore"
+    },
+    {
+      "id": "code-review",
+      "name": "code-review",
+      "description": "Conduct thorough code reviews using a five-axis framework. Use before merging any change. Reviews should improve code health, catch bugs, and share knowledge — not block progress.",
+      "triggers": [
+        "/review",
+        "review this code",
+        "pull request",
+        "merge request",
+        "look at this change"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\code-review"
+    },
+    {
+      "id": "conversation-analyst",
+      "name": "conversation-analyst",
+      "description": "Analyze conversation history patterns and generate structured reports. Usage: /conversation-analyst — asks for a full analytics report including activity stats, engagement quality, top topics, and too",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\conversation-analyst"
+    },
+    {
+      "id": "debugging",
+      "name": "debugging",
+      "description": "Guides systematic root-cause debugging. Use when tests fail, builds break, behavior doesn't match expectations, or you encounter any unexpected error. Follow a structured triage process to find and fi",
+      "triggers": [
+        "/debug",
+        "tests are failing",
+        "build is broken",
+        "this doesn't work",
+        "error in logs",
+        "bug report",
+        "unexpected behavior"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\debugging"
+    },
+    {
+      "id": "e2e-testing-patterns",
+      "name": "e2e-testing-patterns",
+      "description": "Build reliable, fast E2E test suites with Playwright and Cypress. Critical user journey coverage, flaky test elimination, CI/CD integration.",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\e2e-testing-patterns"
+    },
+    {
+      "id": "evolution-events",
+      "name": "evolution-events",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\evolution-events"
+    },
+    {
+      "id": "exec-inline",
+      "name": "exec-inline",
+      "description": "Execute inline JavaScript/Node.js code snippets directly without temp files. Use /eval <code> or /js <code>. Examples: /eval 2+2 /eval Array.from({length:5},(_,i)=>i*i) /js process.version",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\exec-inline"
+    },
+    {
+      "id": "fluid-memory",
+      "name": "fluid-memory",
+      "description": "基于艾宾浩斯遗忘曲线和访问频率的衰减模型设计的遗忘和归档机制，完全依赖openclaw原生记忆系统的拟人化流体记忆系统",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\fluid-memory"
+    },
+    {
+      "id": "git-workflow",
+      "name": "git-workflow",
+      "description": "OpenClaw Git 工作流技能。 当用户提及以下任务时使用： - 提交代码或文档 - 推送到远程仓库 - 管理多个 Git 仓库 - 查看 Git 状态 核心能力: - 自动检测文件变更 - 自动生成提交信息 - 自动推送到远程仓库 - 多仓库管理",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\git-workflow"
+    },
+    {
+      "id": "git-workflow-cn",
+      "name": "git-workflow-cn",
+      "description": "Git 工作流助手 - 分支管理、冲突解决、提交规范。适合：开发者、团队协作。",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\git-workflow-cn"
+    },
+    {
+      "id": "guardrail-config",
+      "name": "guardrail-config",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\guardrail-config"
+    },
+    {
+      "id": "lifecycle-tracing",
+      "name": "lifecycle-tracing",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\lifecycle-tracing"
+    },
+    {
+      "id": "lobster-debugging",
+      "name": "lobster-debugging",
+      "description": "Systematic debugging framework. 4-phase root-cause analysis with defense-in-depth. Never guess, never patch symptoms. From Claude Code + Superpowers.",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\lobster-debugging"
+    },
+    {
+      "id": "memory-assistant",
+      "name": "memory-assistant",
+      "description": "Unified memory system CLI — provenance tracking, knowledge graph, GraphRAG retrieval, Context Core packaging, feedback-driven weights, and proactive memory activation. Use when you need to query, insp",
+      "triggers": [
+        "/memory-assistant --query <text>",
+        "/memory-assistant --status",
+        "/memory-assistant --graph [--mermaid]",
+        "/memory-assistant --provenance <entry-id>",
+        "/memory-assistant --core [--export|--import <path>]",
+        "/memory-assistant --feedback <id> [--used|--rejected]",
+        "/memory-assistant --stats",
+        "/memory-assistant --topics",
+        "/memory-assistant --suggest",
+        "/memory-assistant --bm25 <query>"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\memory-assistant"
+    },
+    {
+      "id": "obsidian-knowledge",
+      "name": "obsidian-knowledge",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\obsidian-knowledge"
+    },
+    {
+      "id": "ontology",
+      "name": "ontology",
+      "description": "Typed knowledge graph for structured agent memory and composable skills. Use when creating/querying entities (Person, Project, Task, Event, Document), linking related objects, enforcing constraints, p",
+      "triggers": [],
+      "references": [
+        "queries.md",
+        "schema.md"
+      ],
+      "scripts": [
+        "ontology.py"
+      ],
+      "has_handler": false,
+      "path": "skills\\ontology"
+    },
+    {
+      "id": "pref_61e6a00a",
+      "name": "pref_61e6a00a",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\pref_61e6a00a"
+    },
+    {
+      "id": "proactive-memory",
+      "name": "proactive-memory",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\proactive-memory"
+    },
+    {
+      "id": "provider-fallback",
+      "name": "provider-fallback",
+      "description": "Multi-provider chat with automatic fallback. Use this when the primary model fails or you want to try alternative providers. Usage: /provider-fallback <model>@<provider> <prompt> — e.g. /provider-fall",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\provider-fallback"
+    },
+    {
+      "id": "sandbox-config",
+      "name": "sandbox-config",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\sandbox-config"
+    },
+    {
+      "id": "self-evolving-skill",
+      "name": "Self-Evolving Skill",
+      "description": "Meta-cognitive self-learning system - Automated skill evolution based on predictive coding and value-driven mechanisms.",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\self-evolving-skill"
+    },
+    {
+      "id": "session-compactor",
+      "name": "session-compactor",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\session-compactor"
+    },
+    {
+      "id": "session-manager",
+      "name": "session-manager",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\session-manager"
+    },
+    {
+      "id": "session-replay",
+      "name": "session-replay",
+      "description": "Replay past session experiences to find similar tasks and their solutions. Usage: /replay <task_description>. Finds relevant past sessions using BM25 search and shows what was done.",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\session-replay"
+    },
+    {
+      "id": "session-search",
+      "name": "session-search",
+      "description": "Search historical conversations using BM25 full-text search. Usage: /session-search <query> — e.g. /session-search openclaw hook memory. Ask anything about past sessions and get ranked results with sn",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\session-search"
+    },
+    {
+      "id": "skill-creator-operator",
+      "name": "skill-creator-operator",
+      "description": "Premium Skill Creator by Kevin Jeppesen (The Operator Vault). Create better OpenClaw skills with a premium first-use setup wizard pattern, minimal context bloat, and reusable scaffolding. Links: YouTu",
+      "triggers": [],
+      "references": [
+        "LINKS.md",
+        "OVERVIEW.md",
+        "PRINCIPLES.md"
+      ],
+      "scripts": [
+        "scaffold-skill.mjs"
+      ],
+      "has_handler": false,
+      "path": "skills\\skill-creator-operator"
+    },
+    {
+      "id": "skill-evolution",
+      "name": "skill-evolution",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\skill-evolution"
+    },
+    {
+      "id": "spec-driven",
+      "name": "spec-driven",
+      "description": "Write structured specifications before writing any code. Use when starting a new project, feature, or significant change and no specification exists yet. Use when requirements are ambiguous, incomplet",
+      "triggers": [
+        "/spec",
+        "start a new project",
+        "build something from scratch",
+        "write a spec",
+        "requirements are unclear"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\spec-driven"
+    },
+    {
+      "id": "swarmvault",
+      "name": "swarmvault",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\swarmvault"
+    },
+    {
+      "id": "task-development-workflow",
+      "name": "task-development-workflow",
+      "description": "TDD-first development workflow with structured planning, task tracking, and PR-based code review. Use when building software projects that require clarification phases, planning approval gates, Trello",
+      "triggers": [],
+      "references": [
+        "workflow-details.md"
+      ],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\task-development-workflow"
+    },
+    {
+      "id": "tdd",
+      "name": "tdd",
+      "description": "Drives development with tests. Use when implementing any logic, fixing any bug, or changing any behavior. Write a failing test before writing the code that makes it pass. Tests are proof — \"seems righ",
+      "triggers": [
+        "/test",
+        "write tests first",
+        "test-driven",
+        "fixing a bug",
+        "implementing logic",
+        "Prove-It pattern"
+      ],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\tdd"
+    },
+    {
+      "id": "tools-to-final-output",
+      "name": "tools-to-final-output",
+      "description": "",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\tools-to-final-output"
+    },
+    {
+      "id": "verify-memory",
+      "name": "verify-memory",
+      "description": "Verify the authenticity of a palace drawer memory using statistical watermarking. Usage: /verify-memory <drawer_id>. Checks if the memory content matches its embedded watermark (X-SIR inspired).",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\verify-memory"
+    },
+    {
+      "id": "web-scraping",
+      "name": "web-scraping",
+      "description": "Extract structured information from websites using web_fetch for simple pages and browser automation for dynamic sites, login-gated flows, pagination, infinite scroll, or pages that require clicking/s",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\web-scraping"
+    },
+    {
+      "id": "windows-gui",
+      "name": "windows-gui",
+      "description": "Control Windows desktop via PyAutoGUI automation. Use this to click, type, scroll, take screenshots, and automate GUI tasks. Examples: /windows-gui click 100 200 /windows-gui type 你好 /windows-gui scre",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\windows-gui"
+    },
+    {
+      "id": "windows-gui-automation-cn",
+      "name": "Windows GUI 自动化集成 (中文)",
+      "description": "开箱即用的Windows桌面GUI自动化集成技能，整合原生UI自动化、鼠标控制、截图识别、AI视觉分析，一站式解决Windows桌面自动化需求。支持打开应用、点击、输入、截图、OCR识别、流程自动化。",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": false,
+      "path": "skills\\windows-gui-automation-cn"
+    },
+    {
+      "id": "windows-gui-workflow",
+      "name": "windows-gui-workflow",
+      "description": "Run multi-step Windows GUI automation workflows. Examples: /gui-workflow open-calculator /gui-workflow open-explorer /gui-workflow screenshot /gui-workflow run <json_path>",
+      "triggers": [],
+      "references": [],
+      "scripts": [],
+      "has_handler": true,
+      "path": "skills\\windows-gui-workflow"
+    }
+  ]
+}
