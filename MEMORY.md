@@ -177,7 +177,7 @@ memory/skill_index.json         # Skill索引（41个技能）
 
 **Skills 安全审计**：30个skills全部通过，无恶意模式
 
-**Skills 总数：41**（截至 2026-04-20）
+**Skills 总数：45**（截至 2026-04-21）
 
 ---
 
@@ -192,6 +192,27 @@ memory/skill_index.json         # Skill索引（41个技能）
 
 ### 依赖
 - [ ] Git remote — Workspace 缺少 push destination
+
+## ai-hedge-fund 深度分析 (2026-04-21)
+
+**仓库**: github.com/virattt/ai-hedge-fund
+**分析文件**: `E:\ai-hedge-fund-analysis.md` (28,696 bytes)
+**子Agent分析**: 8分钟，548.5K tokens
+
+### 核心架构
+
+- **LangGraph DAG**: `AgentState` 用 `Annotated[dict, merge_dicts]` 累积信号
+- **两种Agent模式**: Pattern A (定量→LLM合成) vs Pattern B (纯定量)
+- **Taleb Agent**: 无LLM，纯Python barbell策略
+- **协作机制**: 无显式投票，Portfolio Manager LLM推理 + Risk Manager硬否决
+- **回测引擎**: Sharpe/Sortino/MaxDrawdown，存在两套实现
+
+### Git HEAD (2026-04-21)
+
+| 项目 | 值 |
+|------|-----|
+| HEAD | `5ebe9f7` |
+| 总 commits | 32 |
 
 ---
 
