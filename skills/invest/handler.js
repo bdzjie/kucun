@@ -842,6 +842,253 @@ function aggregateSignals(signals, riskData) {
   };
 }
 
+// ─── PERFORMANCE METRICS (Backtest-style) ──────────────────────────────────────
+// Inspired by ai-hedge-fund backtesting/metrics.py
+
+function computePerformanceMetrics(dailyReturns, riskFreeRate = 0.03) {
+  if (!dailyReturns || dailyReturns.length < 30) {
+    return { sharpe: null, sortino: null, maxDrawdown: null, winRate: null, volatility: null, var95: null, sharpeGrade: 'N/A', sortinoGrade: 'N/A' };
+  }
+
+  const returns = dailyReturns.filter(r => !isNaN(r) && isFinite(r));
+  if (returns.length < 30) return { sharpe: null, sortino: null, maxDrawdown: null, winRate: null, volatility: null, var95: null, sharpeGrade: 'N/A', sortinoGrade: 'N/A' };
+
+  const n = returns.length;
+  const mean = returns.reduce((a, b) => a + b, 0) / n;
+  const std = Math.sqrt(returns.reduce((s, r) => s + (r - mean) ** 2, 0) / n);
+
+  // Annualized metrics (252 trading days)
+  const annReturn = mean * 252;
+  const annVol = std * Math.sqrt(252);
+
+  // Sharpe Ratio
+  const sharpe = annVol > 0 ? (annReturn - riskFreeRate) / annVol : 0;
+
+  // Sortino Ratio (downside deviation only)
+  const downsideReturns = returns.filter(r => r < 0);
+  const downsideStd = downsideReturns.length > 0
+    ? Math.sqrt(downsideReturns.reduce((s, r) => s + r ** 2, 0) / downsideReturns.length)
+    : 0;
+  const annDownside = downsideStd * Math.sqrt(252);
+  const sortino = annDownside > 0 ? (annReturn - riskFreeRate) / annDownside : 0;
+
+  // Max Drawdown
+  let peak = returns[0];
+  let maxDD = 0;
+  let runningMax = peak;
+  for (const r of returns) {
+    if (r > runningMax) runningMax = r;
+    const drawdown = (runningMax - r) / runningMax;
+    if (drawdown > maxDD) maxDD = drawdown;
+  }
+
+  // Win Rate
+  const wins = returns.filter(r => r > 0).length;
+  const winRate = wins / returns.length;
+
+  // VaR (95%)
+  const sorted = [...returns].sort((a, b) => a - b);
+  const varIdx = Math.floor(0.05 * sorted.length);
+  const var95 = sorted[varIdx] || sorted[0];
+
+  // Grades
+  const sharpeGrade = sharpe >= 1.5 ? '⭐⭐⭐ Excellent' : sharpe >= 1.0 ? '⭐⭐ Good' : sharpe >= 0.5 ? '⭐ Fair' : '⚠️ Poor';
+  const sortinoGrade = sortino >= 2.0 ? '⭐⭐⭐ Excellent' : sortino >= 1.2 ? '⭐⭐ Good' : sortino >= 0.5 ? '⭐ Fair' : '⚠️ Poor';
+
+  return {
+    sharpe: Math.round(sharpe * 100) / 100,
+    sortino: Math.round(sortino * 100) / 100,
+    maxDrawdown: Math.round(maxDD * 10000) / 100, // percentage
+    winRate: Math.round(winRate * 10000) / 100,
+    volatility: Math.round(annVol * 10000) / 100,
+    var95: Math.round(var95 * 10000) / 100,
+    sharpeGrade,
+    sortinoGrade,
+    meanReturn: Math.round(mean * 10000) / 100,
+    annReturn: Math.round(annReturn * 10000) / 100,
+    tradingDays: n,
+  };
+}
+
+// ─── CANDLESTICK PATTERN RECOGNITION ──────────────────────────────────────────
+// Detects major candlestick reversal patterns
+
+function detectCandlestickPatterns(klines) {
+  if (!klines || klines.length < 3) return [];
+
+  const patterns = [];
+  const n = klines.length;
+
+  for (let i = 2; i < n; i++) {
+    const curr = klines[i];
+    const prev = klines[i - 1];
+    const prev2 = klines[i - 2];
+
+    const open = curr.o, close = curr.c, high = curr.h, low = curr.l;
+    const body = Math.abs(close - open);
+    const upperShadow = high - Math.max(open, close);
+    const lowerShadow = Math.min(open, close) - low;
+    const bodyPct = body / (high - low || 1);
+
+    // Doji: open ≈ close (within 0.1%)
+    if (body < 0.001 * open) {
+      patterns.push({ date: curr.d, pattern: 'Doji', signal: 'NEUTRAL', confidence: 65 });
+    }
+
+    // Hammer: lower shadow > 2x body, upper shadow < 0.5x body
+    if (lowerShadow > 2 * body && upperShadow < 0.5 * body && close > open) {
+      patterns.push({ date: curr.d, pattern: 'Hammer', signal: 'BULLISH', confidence: 75 });
+    }
+
+    // Hanging Man: same as hammer but after uptrend
+    if (lowerShadow > 2 * body && upperShadow < 0.5 * body && close < open && prev.c > prev.o) {
+      patterns.push({ date: curr.d, pattern: 'Hanging Man', signal: 'BEARISH', confidence: 70 });
+    }
+
+    // Bullish Engulfing: down day followed by up day with body engulfing previous
+    if (i >= 2 && prev.c < prev.o && close > open) {
+      const prevBodyTop = Math.max(prev.o, prev.c);
+      const prevBodyBot = Math.min(prev.o, prev.c);
+      const currBodyTop = Math.max(open, close);
+      const currBodyBot = Math.min(open, close);
+      if (currBodyTop > prevBodyTop && currBodyBot < prevBodyBot) {
+        patterns.push({ date: curr.d, pattern: 'Bullish Engulfing', signal: 'BULLISH', confidence: 80 });
+      }
+    }
+
+    // Bearish Engulfing: up day followed by down day with body engulfing previous
+    if (i >= 2 && prev.c > prev.o && close < open) {
+      const prevBodyTop = Math.max(prev.o, prev.c);
+      const prevBodyBot = Math.min(prev.o, prev.c);
+      const currBodyTop = Math.max(open, close);
+      const currBodyBot = Math.min(open, close);
+      if (currBodyBot < prevBodyBot && currBodyTop > prevBodyTop) {
+        patterns.push({ date: curr.d, pattern: 'Bearish Engulfing', signal: 'BEARISH', confidence: 80 });
+      }
+    }
+
+    // Morning Star: down + doji + up (3-day reversal)
+    if (i >= 2) {
+      const prev2Body = Math.abs(prev2.c - prev2.o);
+      const prevBody2 = Math.abs(prev.c - prev.o);
+      const isDoji = prevBody2 < 0.001 * prev.o;
+      if (prev2.c < prev2.o && isDoji && close > open && close > (prev2.o + prev2.c) / 2) {
+        patterns.push({ date: curr.d, pattern: 'Morning Star', signal: 'BULLISH', confidence: 85 });
+      }
+      if (prev2.c > prev2.o && isDoji && close < open && close < (prev2.o + prev2.c) / 2) {
+        patterns.push({ date: curr.d, pattern: 'Evening Star', signal: 'BEARISH', confidence: 85 });
+      }
+    }
+
+    // Three White Soldiers: 3 consecutive up days with progressive closes
+    if (i >= 2 &&
+        prev2.c > prev2.o && prev.c > prev.o && close > open &&
+        prev2.c > prev2.o + prev2Body * 0.5 &&
+        prev.c > prev.o + prevBody2 * 0.5 &&
+        close > open + body * 0.5) {
+      patterns.push({ date: curr.d, pattern: 'Three White Soldiers', signal: 'BULLISH', confidence: 90 });
+    }
+  }
+
+  // Return most significant recent patterns
+  return patterns.slice(-5);
+}
+
+// ─── SECTOR/INDUSTRY CLASSIFICATION ───────────────────────────────────────────
+// Fetch from Eastmoney stock profile API
+
+async function fetchStockProfile(ticker) {
+  try {
+    const { market, code } = normalizeTicker(ticker);
+    const secid = `${market}.${code}`;
+    const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f57,f58,f162,f167,f168,f169,f170,f171,f127,f128,f135,f136`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) return {};
+    const json = await res.json();
+    const d = json.data || {};
+    return {
+      name: d.f58 || ticker,
+      sector: d.f127 || 'N/A',
+      industry: d.f128 || 'N/A',
+      market: d.f135 || 'N/A',
+      listedDate: d.f136 || 'N/A',
+      totalShares: d.f167 ? (d.f167 / 1e8).toFixed(2) + '亿' : 'N/A',
+      floatShares: d.f168 ? (d.f168 / 1e8).toFixed(2) + '亿' : 'N/A',
+    };
+  } catch (e) {
+    return {};
+  }
+}
+
+// ─── PRICE TARGET CALCULATION ─────────────────────────────────────────────────
+// Graham Number, DCF estimate, PEG-based target
+
+function calculatePriceTargets(stockData, fundamentals) {
+  const price = stockData?.price;
+  const pe = stockData?.pe !== 'N/A' ? parseFloat(stockData.pe) : null;
+  const pb = stockData?.pb !== 'N/A' ? parseFloat(stockData.pb) : null;
+  const eps = fundamentals?.eps;
+  const bps = fundamentals?.bps;
+  const revenueGrowth = fundamentals?.revenueGrowth;
+
+  const targets = {};
+
+  // Graham Number: sqrt(22.5 * EPS * BVPS)
+  if (eps && bps && eps > 0 && bps > 0) {
+    const grahamNum = Math.sqrt(22.5 * eps * bps);
+    targets.graham = {
+      price: Math.round(grahamNum * 100) / 100,
+      upside: price > 0 ? Math.round((grahamNum / price - 1) * 10000) / 100 : null,
+    };
+  }
+
+  // PEG-based: fair PE = earnings growth rate → target = current EPS * growth rate
+  if (pe && revenueGrowth && revenueGrowth > 0) {
+    const pegFairPE = revenueGrowth * 100; // assume growth rate as PE
+    const epsVal = fundamentals?.netProfit && fundamentals?.sharesOutstanding
+      ? fundamentals.netProfit / fundamentals.sharesOutstanding
+      : eps;
+    if (epsVal) {
+      const pegTarget = epsVal * pegFairPE;
+      targets.peg = {
+        price: Math.round(pegTarget * 100) / 100,
+        fairPE: Math.round(pegFairPE * 100) / 100,
+        upside: price > 0 ? Math.round((pegTarget / price - 1) * 10000) / 100 : null,
+      };
+    }
+  }
+
+  // Simple DCF: assume 10% discount rate, 5-year CAGR projection
+  if (fundamentals?.operatingCF) {
+    const ccf = fundamentals.operatingCF;
+    const growthRate = fundamentals.revenueGrowth || 0.1;
+    const dcf5yr = ccf * Math.pow(1 + growthRate, 5) / 0.10; // simplified
+    const perShare = dcf5yr / (stockData?.sharesOutstanding || 1);
+    targets.dcf = {
+      price: Math.round(perShare * 100) / 100,
+      upside: price > 0 ? Math.round((perShare / price - 1) * 10000) / 100 : null,
+      note: '基于现金流折现(10%折现率, 5年CAGR)'
+    };
+  }
+
+  // Relative PE target (vs sector average)
+  if (pe && fundamentals?.sectorPE) {
+    const sectorAvgPE = fundamentals.sectorPE;
+    const epsVal = eps || (fundamentals?.netProfit && fundamentals?.sharesOutstanding
+      ? fundamentals.netProfit / fundamentals.sharesOutstanding : null);
+    if (epsVal) {
+      const relTarget = epsVal * sectorAvgPE;
+      targets.relativePE = {
+        price: Math.round(relTarget * 100) / 100,
+        sectorAvgPE,
+        upside: price > 0 ? Math.round((relTarget / price - 1) * 10000) / 100 : null,
+      };
+    }
+  }
+
+  return targets;
+}
+
 // ─── MAIN HANDLER ───────────────────────────────────────────────────────────────
 
 export default async function handler(input, context) {
@@ -896,7 +1143,24 @@ export default async function handler(input, context) {
   // ── 6. Portfolio aggregation ──────────────────────────────────────────────
   const verdict = aggregateSignals(signals, riskData);
 
-  // ── 7. Build report ───────────────────────────────────────────────────────
+  // ── 8. Performance metrics ───────────────────────────────────────────────
+  const dailyReturns = [];
+  for (let i = 1; i < priceHistory.length; i++) {
+    dailyReturns.push((priceHistory[i].c - priceHistory[i-1].c) / priceHistory[i-1].c);
+  }
+  const perfMetrics = computePerformanceMetrics(dailyReturns);
+
+  // ── 9. Candlestick patterns ───────────────────────────────────────────────
+  const klines = priceHistory.map(p => ({ d: p.d, o: p.o, c: p.c, h: p.h, l: p.l }));
+  const candlePatterns = detectCandlestickPatterns(klines);
+
+  // ── 10. Sector profile ──────────────────────────────────────────────────
+  const profile = await fetchStockProfile(ticker);
+
+  // ── 11. Price targets ───────────────────────────────────────────────────
+  const priceTargets = calculatePriceTargets(stockData, fundamentals);
+
+  // ── 12. Build report ───────────────────────────────────────────────────────
   const verdictEmoji = { BUY: '🟢', HOLD: '🟡', SELL: '🔴', REDUCE: '⚠️' }[verdict.action] || '⚪';
   const now = new Date().toLocaleString('zh-CN');
 
@@ -958,6 +1222,68 @@ export default async function handler(input, context) {
     report += `| 风险警告 | ${riskData.warnings.join(' | ')} |\n`;
   }
   report += `\n`;
+
+  // Performance metrics (backtest-style)
+  if (perfMetrics.sharpe !== null) {
+    report += `---\n\n## 📊 绩效指标（回测风格）\n\n`;
+    report += `| 指标 | 数值 | 评级 |\n|--------|------|------|\n`;
+    report += `| 夏普比率 | ${perfMetrics.sharpe} | ${perfMetrics.sharpeGrade} |\n`;
+    report += `| 索提诺比率 | ${perfMetrics.sortino} | ${perfMetrics.sortinoGrade} |\n`;
+    report += `| 最大回撤 | ${perfMetrics.maxDrawdown}% | \n`;
+    report += `| 胜率 | ${perfMetrics.winRate}% | \n`;
+    report += `| 年化波动率 | ${perfMetrics.volatility}% | \n`;
+    report += `| VaR(95%) | ${perfMetrics.var95}% (日度) | \n`;
+    report += `| 年化收益率 | ${perfMetrics.annReturn}% | \n`;
+    report += `| 数据天数 | ${perfMetrics.tradingDays}天 | \n\n`;
+  }
+
+  // Candlestick patterns
+  if (candlePatterns.length > 0) {
+    report += `---\n\n## 🕯️ K线形态\n\n`;
+    report += `| 日期 | 形态 | 信号 | 置信度 |\n|------|------|------|----------|\n`;
+    for (const p of candlePatterns) {
+      const sig = p.signal === 'BULLISH' ? '🟢  看涨' : p.signal === 'BEARISH' ? '🔴 看跌' : '🟡 中性';
+      report += `| ${p.date || '最近'} | ${p.pattern} | ${sig} | ${p.confidence}% |\n`;
+    }
+    report += `\n`;
+  }
+
+  // Sector profile
+  if (profile.sector && profile.sector !== 'N/A') {
+    report += `---\n\n## 🏢 公司概况\n\n`;
+    report += `| 项目 | 内容 |\n|--------|------|\n`;
+    report += `| 公司名 | ${profile.name} |\n`;
+    report += `| 所属行业 | ${profile.sector} |\n`;
+    report += `| 细分行业 | ${profile.industry !== 'N/A' ? profile.industry : 'N/A'} |\n`;
+    report += `| 上市板 | ${profile.market} |\n`;
+    report += `| 上市时间 | ${profile.listedDate !== 'N/A' ? profile.listedDate : 'N/A'} |\n`;
+    report += `| 总股本 | ${profile.totalShares} |\n`;
+    report += `| 流通股本 | ${profile.floatShares} |\n\n`;
+  }
+
+  // Price targets
+  const targetKeys = Object.keys(priceTargets);
+  if (targetKeys.length > 0) {
+    report += `---\n\n## 🎯 估值目标\n\n`;
+    report += `| 方法 | 目标价 | 上涨空间 | 说明 |\n|------|--------|----------|------|\n`;
+    if (priceTargets.graham) {
+      const up = priceTargets.graham.upside;
+      report += `| Graham数 | ¥${priceTargets.graham.price} | ${up > 0 ? '+' : ''}${up}% | sqrt(22.5×EPS×BVPS) |\n`;
+    }
+    if (priceTargets.peg) {
+      const up = priceTargets.peg.upside;
+      report += `| PEG估值 | ¥${priceTargets.peg.price} | ${up > 0 ? '+' : ''}${up}% | 合理PE=${priceTargets.peg.fairPE} |\n`;
+    }
+    if (priceTargets.dcf) {
+      const up = priceTargets.dcf.upside;
+      report += `| DCF折现 | ¥${priceTargets.dcf.price} | ${up > 0 ? '+' : ''}${up}% | ${priceTargets.dcf.note} |\n`;
+    }
+    if (priceTargets.relativePE) {
+      const up = priceTargets.relativePE.upside;
+      report += `| 相对PE | ¥${priceTargets.relativePE.price} | ${up > 0 ? '+' : ''}${up}% | 行业均值PE=${priceTargets.relativePE.sectorAvgPE} |\n`;
+    }
+    report += `\n`;
+  }
 
   // Technical signals
   report += `---\n\n## 📉 技术分析\n\n`;
