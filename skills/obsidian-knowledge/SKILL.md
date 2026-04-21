@@ -1,3 +1,12 @@
+---
+name: obsidian-knowledge
+description: "Bidirectional sync between OpenClaw memory and Obsidian vault."
+triggers:
+  - /obsidian-knowledge
+  - obsidian sync
+  - vault scan
+---
+
 # Obsidian Knowledge Base
 
 **Command**: `/obsidian-knowledge`

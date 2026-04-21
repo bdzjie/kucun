@@ -1,3 +1,12 @@
+---
+name: agent-teams
+description: "Multi-Agent Role System inspired by MetaGPT and CrewAI. Manage teams of specialized agents with role-based handoffs."
+triggers:
+  - /agent-teams
+  - create agent team
+  - multi-agent collaboration
+---
+
 # Agent Teams
 
 **Command**: `/agent-teams`

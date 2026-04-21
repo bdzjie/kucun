@@ -1,3 +1,12 @@
+---
+name: swarmvault
+description: "Local-first knowledge compiler based on SwarmVault pattern. Graph-based knowledge management and contradiction detection."
+triggers:
+  - /swarmvault
+  - knowledge graph
+  - contradiction detection
+---
+
 # SwarmVault Bridge
 
 **Command**: `/swarmvault`

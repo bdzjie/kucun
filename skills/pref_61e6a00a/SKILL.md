@@ -1,3 +1,11 @@
+---
+name: pref_61e6a00a
+description: "User preference: Markdown format output for wing_user preferences"
+triggers:
+  - Markdown format output
+  - user preferences
+---
+
 # pref_61e6a00a
 
 > Auto-created by Auto Skill Creator | 2026-04-19T12:40:03.444870

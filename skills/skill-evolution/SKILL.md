@@ -1,3 +1,12 @@
+---
+name: skill-evolution
+description: "Evolve OpenClaw skills using GEPA or Ralph Wiggum self-referential iteration."
+triggers:
+  - /skill-evolution
+  - evolve skill
+  - skill self-improvement
+---
+
 # Skill Evolution
 
 进化 OpenClaw skills 使其更好。

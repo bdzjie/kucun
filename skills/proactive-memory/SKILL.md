@@ -1,3 +1,12 @@
+---
+name: proactive-memory
+description: "Proactive memory activation system — surfaces relevant memories before you ask."
+triggers:
+  - /proactive-memory
+  - surface memories
+  - proactive recall
+---
+
 # Proactive Memory Skill
 
 Proactive memory activation system — surfaces relevant memories before you ask.

@@ -1,3 +1,12 @@
+---
+name: sandbox-config
+description: "Manage OpenClaw security sandbox configuration."
+triggers:
+  - /sandbox-config
+  - sandbox configuration
+  - security settings
+---
+
 # Sandbox Config
 
 管理 OpenClaw 安全沙箱配置。
