@@ -1,68 +1,108 @@
 ---
 name: invest
 description: >
-  Investment Advisory Council — get multi-perspective analysis on any stock.
-  Each investor persona (Buffett/Munger/Taleb/etc.) gives an opinion on fundamentals,
-  valuation, technicals, and sentiment. Use when asked about a stock buy/sell/hold recommendation.
-  NOT financial advice — for educational purposes only.
+  AI Investment Advisory Council — multi-perspective stock analysis.
+  Each investor persona (Buffett/Munger/Taleb/etc.) gives a BUY/HOLD/SELL/REDUCE
+  signal with confidence and reasoning. Aggregated verdict from Portfolio Manager.
+  Use when asked about stock buy/sell/hold recommendation, investment analysis,
+  or financial advisory. NOT financial advice — educational purposes only.
 triggers:
   - invest
-  - analyze stock
+  - stock analysis
   - 股票分析
   - 估值分析
   - K线
   - 买卖建议
   - 投资建议
+  - 投资顾问
 command-dispatch: tool
 ---
 
-# Invest — AI Investment Advisory Council
+# Invest — AI Investment Advisory Council v3
+
+Multi-agent investment analysis inspired by [virattt/ai-hedge-fund](https://github.com/virattt/ai-hedge-fund).
+
+## Architecture
+
+```
+Ticker Input
+    │
+    ├─► [Investor Agents] (13 personas, parallel)
+    │     Buffett / Munger / Taleb / Graham / Lynch /
+    │     Burry / Wood / Fisher / Damodaran /
+    │     Druckenmiller / Ackman / Pabrai / Jhunjhunwala
+    │
+    ├─► [Technical Analyst] (RSI/MACD/Bollinger/MA)
+    │
+    └─► [Portfolio Manager] — aggregates signals → BUY/HOLD/SELL/REDUCE
+```
 
 ## Usage
 
 ```
-/invest AAPL
-/invest TSLA --analysts buffet,munger,taleb
-/invest 腾讯 --Perspectives fundamentals,technicals,sentiment
+/invest 002624      # 完整分析（完美世界，13位分析师）
+/invest AAPL buffet,munger,taleb   # 只用指定分析师
+/invest 腾讯         # 中文股票（腾讯=hk00700）
+/invest 600519       # 贵州茅台（上交所）
 ```
 
-## 分析师列表
+## Data Sources
 
-| Key | 分析师 | 风格 |
-|-----|--------|------|
-| warren_buffett | Warren Buffett | 价值投资 + 护城河 + 内在价值 |
-| charlie_munger | Charlie Munger | 优质企业 + 理性决策 |
-| nassim_taleb | Nassim Taleb | 反脆弱 + 黑天鹅风险 + 尾部风险 |
-| ben_graham | Ben Graham | 安全边际 + 格雷厄姆数 |
-| peter_lynch | Peter Lynch | 成长股 + PEG + 十倍股 |
-| michael_burry | Michael Burry | 逆向价值 + 做空机会 |
-| bill_ackman | Bill Ackman | 积极主义投资 + 催化剂 |
-| cathie_wood | Cathie Wood | 颠覆性创新 + 成长 |
-| phil_fisher | Phil Fisher | scuttlebutt 研究 + 管理质量 |
-| aswath_damodaran | Aswath Damodaran | 内在估值 + 叙事分析 |
-| stanley_druckenmiller | Stanley Druckenmiller | 宏观 + 动量 |
-| mohnish_pabrai | Mohnish Pabrai | Dhandho 低风险 |
-| rakesh_jhunjhunwala | Rakesh Jhunjhunwala | 新兴市场 + 宏观 |
-| technical_analyst | 技术分析师 | K线/RSI/MACD/布林带 |
-| fundamentals_analyst | 基本面分析师 | 财务报表 + 比率 |
-| sentiment_analyst | 情绪分析师 | 市场情绪 + 行为金融 |
-| valuation_analyst | 估值分析师 | DCF/Graham/PEG |
+| Source | Coverage | Auth |
+|--------|----------|------|
+| Eastmoney (东方财富) | A股/港股/美股 | Free |
+| Financial Datasets API | 财务指标 | API Key |
+| Yahoo Finance | 美股 | Blocked in China |
 
-## 输出格式
+## Investor Personas
 
-每个分析师返回：
-- **signal**: BUY / HOLD / SELL / REDUCE
-- **confidence**: 0-100%
-- **reasoning**: 简短理由（<100字）
+| Key | Name | Style | Weight |
+|-----|------|-------|--------|
+| buffet | Warren Buffett | 价值/护城河 | 1.0 |
+| munger | Charlie Munger | 优质/理性 | 0.9 |
+| taleb | Nassim Taleb | 尾部风险 | 1.2 |
+| graham | Ben Graham | 安全边际 | 0.9 |
+| lynch | Peter Lynch | 成长/PEG | 1.0 |
+| burry | Michael Burry | 逆向深度价值 | 0.8 |
+| wood | Cathie Wood | 颠覆性创新 | 1.1 |
+| fisher | Phil Fisher | scuttlebutt | 0.85 |
+| damodaran | Aswath Damodaran | DCF内在价值 | 1.0 |
+| druckenmiller | Stanley Druckenmiller | 宏观动量 | 0.9 |
+| ackman | Bill Ackman | 积极主义催化剂 | 1.3 |
+| pabrai | Mohnish Pabrai | Dhandho低风险 | 1.0 |
+| jhunjhunwala | Rakesh Jhunjhunwala | 新兴市场 | 0.9 |
 
-最终综合建议由决策Agent根据各分析师信号加权汇总。
+## Output Fields
 
-## 数据来源
+Per investor:
+- **action**: BUY / HOLD / SELL / REDUCE
+- **confidence**: 0–100%
+- **reasoning**: <100 chars
 
-- 实时价格：`web_fetch` 抓取 Yahoo Finance
-- 财务数据：`financial_datasets_api` (如果有key)
-- K线图：`agent-browser` (如已安装)
+Portfolio Manager:
+- **action**: Aggregated decision
+- **confidence**: Weighted average
+- **vote distribution**: BUY/HOLD/SELL/REDUCE counts
 
-## 免责声明
+## Signal Aggregation Logic
 
-本工具仅供教育和研究目的，不构成任何投资建议或盈利保证。
+```
+weighted_score = Σ(action_weight × investor_weight × confidence/100)
+action_weight: BUY=1, HOLD=0, SELL=-0.5, REDUCE=-0.8
+final_action: threshold-based on weighted_score
+```
+
+## Technical Indicators
+
+- **RSI(14)**: Overbought>70 / Oversold<30
+- **MACD**: EMA(12) - EMA(26), signal line crossover
+- **Bollinger Bands**: 20-period ±2σ
+- **Volatility**: Annualized 20-day returns std
+- **MA50/MA200**: Golden Cross / Death Cross
+
+## Risk Warnings
+
+Auto-triggered when:
+- Taleb/Graham/Burry发出SELL/REDUCE → ⚠️尾部风险警告
+- Volatility > 50% → ⚠️高波动警告
+- RSI > 70 或 < 30 → ⚠️超买/超卖警告
