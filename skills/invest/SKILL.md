@@ -4,10 +4,18 @@ description: >
   AI Investment Advisory Council — multi-perspective stock analysis.
   Each investor persona (Buffett/Munger/Taleb/etc.) gives a BUY/HOLD/SELL/REDUCE
   signal with confidence and reasoning. Aggregated verdict from Portfolio Manager.
+  Enhanced with FinceptTerminal-inspired macro analysis (FRED/IMF/World Bank) and
+  quantitative factor library (VaR, Sharpe, RSI, MACD, Bollinger Bands).
   Use when asked about stock buy/sell/hold recommendation, investment analysis,
   or financial advisory. NOT financial advice — educational purposes only.
 triggers:
   - invest
+  - macro
+  - quant
+  - 宏观分析
+  - 量化因子
+  - FRED
+  - VaR
   - stock analysis
   - 股票分析
   - 估值分析
@@ -172,6 +180,64 @@ final_verdict: threshold-based with Kelly position recommendation
 - **MACD**: EMA(12) - EMA(26), signal line crossover
 - **Bollinger Bands**: 20-period ±2σ
 - **MA50/MA200**: Golden Cross / Death Cross
+
+## FinceptTerminal-Inspired Enhancements (2026-04-22)
+
+### modules/invest/data_connectors.py — 100+ Data Sources
+
+Unified DataConnectorManager with 4 connectors (inspired by FinceptTerminal):
+
+| Connector | Source | Key Indicators |
+|-----------|--------|---------------|
+| FredConnector | 美联储 FRED API | DFF(联邦基金利率), DGS10(10y国债), UNRATE, CPIAUCSL |
+| IMFConnector | IMF WEO | NGDP_RPCH(实际GDP增长), 通胀预测 |
+| WorldBankConnector | World Bank API | NY.GDP.MKTP.CD(GDP), 人口, 发展指标 |
+| AkShareConnector | A股实时行情 | 股票/指数实时报价 (无需登录) |
+
+```python
+from modules.invest.data_connectors import DataConnectorManager
+
+mgr = DataConnectorManager()
+# 添加 FRED (需要 API key)
+mgr.add_connector(FredConnector(api_key="your-key"), "fred")
+
+# 查询 10 年期国债收益率
+resp = await mgr.get("fred", "DGS10")
+print(resp.data)
+```
+
+### modules/invest/macro_expert.py — Economic Expert Agent
+
+Inspired by FinceptTerminal Economic Agent:
+- **PolicyStance**: Taylor Rule-based monetary policy judgment
+- **Yield Curve**: Normal / Flat / Inverted / Hiroshima classification
+- **Recession Probability**: Based on curve shape + leading indicators
+- **Parallel Data Fetch**: FRED + IMF + WorldBank simultaneously
+
+```python
+from modules.invest.macro_expert import MacroExpert
+
+expert = MacroExpert(api_key_fred="your-key")
+verdict = await expert.analyze()
+print(expert.format_report(verdict))
+```
+
+### modules/invest/quant_factors.py — Quantitative Factor Library
+
+Inspired by FinceptTerminal QuantLib Suite:
+- **Risk Metrics**: Sharpe, Sortino, Calmar, Max Drawdown
+- **VaR/CVaR**: Value at Risk + Expected Shortfall (95%/99%)
+- **Volatility Regime**: low / medium / high / extreme
+- **Technical Factors**: RSI, MACD, Bollinger Bands, ATR
+
+```python
+from modules.invest.quant_factors import QuantitativeFactors
+
+qf = QuantitativeFactors([180.0, 182.5, 181.2, ...])
+report = qf.full_report(rf=0.02)
+print(qf.format_report(report))
+# Output: sharpe=0.89, var=3.58%, rsi=33.3, macd=-4.4%...
+```
 
 ## Risk Warnings
 
