@@ -45,6 +45,7 @@ import { globalToolRegistry, type ToolContext } from '../registry/registry'
 
 import { routingService, type RoutingService } from './routing_service'
 import { skillDispatcher, type SkillChainItem } from './skill_dispatcher'
+import { appContext, type RoutingContext } from './app_context'
 import type { RouteResult } from './routing_service'
 
 // Routing state + skill chain context passed to tools via ToolContext
@@ -307,6 +308,22 @@ export class AIAgent {
         source: 'router' as const,
         reason: `router[${this.currentRoute.task_type}]`,
       }))
+
+      // Set routing context in AppContext (ForgeApp-style shared state)
+      const routingCtx: RoutingContext = {
+        expert: this.currentRoute.expert,
+        taskType: this.currentRoute.task_type,
+        depth: this.currentRoute.depth,
+        confidence: this.currentRoute.confidence,
+        skills: this.currentRoute.skills,
+        chain: this.currentChain,
+        iteration: 0,
+        startedAt: Date.now(),
+      }
+      appContext.setRoutingContext(routingCtx)
+      if (this.runtimeProvider) {
+        appContext.setProvider(this.runtimeProvider)
+      }
 
       // Write routing state to canvas state file (for canvas bridge)
       this.writeRoutingState()

@@ -222,13 +222,17 @@ class ExpertRouter:
                 if re.search(kw, msg_raw, re.IGNORECASE)
             ]
 
-        # 确定推理深度
-        if best_expert == "file_expert" or best_expert == "system_expert":
-            depth: ReasoningDepth = "fast"
-        elif best_expert == "analysis_expert":
-            depth = "deep"
-        else:
-            depth = DEPTH_CONFIG[best_expert]["preferred_depth"]
+        # Expert → Depth mapping
+        EXPERT_DEPTH_MAP = {
+            "file_expert": "fast",
+            "system_expert": "fast",
+            "analysis_expert": "deep",
+            "code_expert": "normal",
+            "memory_expert": "normal",
+            "web_expert": "normal",
+            "general": "normal",
+        }
+        depth: ReasoningDepth = EXPERT_DEPTH_MAP.get(best_expert, "normal")
 
         # 置信度：匹配词数 / 总关键词数
         total_kw = len(EXPERTS[best_expert]["keywords"])
@@ -329,28 +333,34 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1:
         message = " ".join(sys.argv[1:])
+
+        # JSON mode for programmatic callers
+        if message == "--json":
+            import json
+            print(json.dumps(router.get_depth_config()))
+            sys.exit(0)
+
+        # Strip --json flag if passed as separate arg
+        if "--json" in sys.argv:
+            argv_no_json = [a for a in sys.argv if a != "--json"]
+            message = " ".join(argv_no_json[1:])
+
         result = router.classify(message)
+
+        # If caller passed --json flag, output machine-readable JSON
+        if "--json" in sys.argv:
+            import json
+            print(json.dumps(result.to_dict(), ensure_ascii=False))
+            sys.exit(0)
+
         print(f"\n{'='*50}")
-        print(f"输入: {message}")
-        print(f"分类: {result.task_type}")
-        print(f"专家: {result.expert}")
-        print(f"深度: {result.depth}")
-        print(f"置信: {result.confidence:.2f}")
+        print(f"\u8f93\u5165: {message}")
+        print(f"\u5206\u7c7b: {result.task_type}")
+        print(f"\u4e13\u5bb6: {result.expert}")
+        print(f"\u6df1\u5ea6: {result.depth}")
+        print(f"\u7f6e\u4fe1: {result.confidence:.2f}")
         print(f"Skills: {result.skills}")
-        print(f"匹配词: {result.matched_keywords}")
-        print(f"\n深度配置: {DEPTH_CONFIG[result.depth]}")
+        print(f"\u5339\u914d\u8bcd: {result.matched_keywords}")
+        print(f"\n\u6df1\u5ea6\u914d\u7f6e: {DEPTH_CONFIG[result.depth]}")
         print(f"{'='*50}\n")
-    else:
-        # 内置测试用例
-        test_cases = [
-            "帮我写一个 Python 函数计算斐波那契数列",
-            "分析一下 Claude Code 的架构设计",
-            "记得我们上次讨论的内容吗",
-            "搜索 GitHub 上的 Claude Mythos 仓库",
-            "配置 OpenClaw gateway",
-            "你好，今天怎么样",
-        ]
-        print("\n--- Expert Router 测试 ---\n")
-        for msg in test_cases:
-            r = router.classify(msg)
-            print(f"[{r.task_type:10}] [{r.depth:5}] {msg[:30]}...")
+
