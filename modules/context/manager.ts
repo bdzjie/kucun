@@ -12,10 +12,12 @@ import type {
   CompactionStrategy,
   ContextEvent,
   TokenCounterConfig,
+  ReasoningDepth,
 } from './types'
 import {
   DEFAULT_CONTEXT_BUDGET,
   DEFAULT_TOKEN_CONFIG,
+  DEPTH_CONFIG,
 } from './types'
 
 // ============================================================================
@@ -31,7 +33,10 @@ export class DefaultCompactionStrategy implements CompactionStrategy {
   description = 'Default compaction strategy using safe breakpoints'
 
   findSafeBreakpoint(messages: Message[], budget: ContextBudget): SafeBreakpoint {
-    const maxTokens = budget.maxTokens * budget.compactThreshold
+    // OpenMythos-style: deep 模式更早压缩，保留空间给长推理链
+    const depthConfig = DEPTH_CONFIG[budget.reasoningDepth ?? 'normal']
+    const compactThreshold = depthConfig?.compactThreshold ?? budget.compactThreshold
+    const maxTokens = budget.maxTokens * compactThreshold
     
     let totalTokens = 0
     let breakpointIndex = messages.length

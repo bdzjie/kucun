@@ -1,7 +1,46 @@
 /**
  * Context Module - Type Definitions
  * 上下文管理模块 - 基于 Claude Code 压缩系统设计
+ * 支持 OpenMythos 风格的推理深度模式
  */
+
+// ============================================================================
+// Reasoning Depth (OpenMythos-style loop control)
+// ============================================================================
+
+/**
+ * 推理深度级别 — 对应 OpenMythos 的 max_loop_iters
+ * - fast:    1 tool call, no iteration (类似单步推理)
+ * - normal:  3 tool calls, basic loop (标准工具链)
+ * - deep:    8 tool calls, full loop (深度推理，类似 OpenMythos RDT)
+ */
+export type ReasoningDepth = 'fast' | 'normal' | 'deep'
+
+export const DEPTH_CONFIG: Record<ReasoningDepth, {
+  maxToolCalls: number
+  maxIterations: number
+  compactThreshold: number   // 触发压缩的 token 使用比例
+  warningThreshold: number
+}> = {
+  fast: {
+    maxToolCalls: 1,
+    maxIterations: 1,
+    compactThreshold: 0.90,
+    warningThreshold: 0.95,
+  },
+  normal: {
+    maxToolCalls: 3,
+    maxIterations: 3,
+    compactThreshold: 0.75,
+    warningThreshold: 0.85,
+  },
+  deep: {
+    maxToolCalls: 8,
+    maxIterations: 8,
+    compactThreshold: 0.60,  // 更早压缩，保留空间给深度推理
+    warningThreshold: 0.75,
+  },
+}
 
 // ============================================================================
 // Message Types
@@ -46,6 +85,8 @@ export interface ContextBudget {
   autoCompact: boolean
   /** 压缩阈值（百分比） */
   compactThreshold: number
+  /** 推理深度模式 — OpenMythos-style loop control */
+  reasoningDepth: ReasoningDepth
 }
 
 // ============================================================================
@@ -131,7 +172,8 @@ export const DEFAULT_CONTEXT_BUDGET: ContextBudget = {
   warningThreshold: 0.8,    // 80%
   errorThreshold: 1.0,      // 100%
   autoCompact: true,
-  compactThreshold: 0.85,   // 85%
+  compactThreshold: 0.85,   // 85% (normal 模式的默认值)
+  reasoningDepth: 'normal', // 默认深度模式 (OpenMythos-style)
 }
 
 export const DEFAULT_TOKEN_CONFIG: TokenCounterConfig = {
