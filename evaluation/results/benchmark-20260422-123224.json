@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-04-22T12:32:24.572285",
+  "suites": [
+    {
+      "suite": "routing",
+      "name": "Expert Router Routing Quality",
+      "total": 6,
+      "passed": 5,
+      "accuracy": 83.33333333333334,
+      "task_results": [
+        {
+          "task_id": "route_code_1",
+          "suite": "routing",
+          "input": "写一个 Python 函数计算斐波那契数列",
+          "expected_expert": "code_expert",
+          "expected_depth": "normal",
+          "actual_expert": "code_expert",
+          "actual_depth": "normal",
+          "expert_correct": true,
+          "depth_correct": true,
+          "duration_ms": 79,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.112597"
+        },
+        {
+          "task_id": "route_code_2",
+          "suite": "routing",
+          "input": "分析这段代码的性能并给出优化建议",
+          "expected_expert": "code_expert",
+          "expected_depth": "deep",
+          "actual_expert": "analysis_expert",
+          "actual_depth": "deep",
+          "expert_correct": false,
+          "depth_correct": true,
+          "duration_ms": 75,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.191962"
+        },
+        {
+          "task_id": "route_analysis_1",
+          "suite": "routing",
+          "input": "分析 Claude Code 的架构设计",
+          "expected_expert": "analysis_expert",
+          "expected_depth": "deep",
+          "actual_expert": "analysis_expert",
+          "actual_depth": "deep",
+          "expert_correct": true,
+          "depth_correct": true,
+          "duration_ms": 74,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.267549"
+        },
+        {
+          "task_id": "route_memory_1",
+          "suite": "routing",
+          "input": "记得我们上次讨论的内容吗",
+          "expected_expert": "memory_expert",
+          "expected_depth": "normal",
+          "actual_expert": "memory_expert",
+          "actual_depth": "normal",
+          "expert_correct": true,
+          "depth_correct": true,
+          "duration_ms": 73,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.342171"
+        },
+        {
+          "task_id": "route_system_1",
+          "suite": "routing",
+          "input": "配置 OpenClaw gateway",
+          "expected_expert": "system_expert",
+          "expected_depth": "fast",
+          "actual_expert": "system_expert",
+          "actual_depth": "fast",
+          "expert_correct": true,
+          "depth_correct": true,
+          "duration_ms": 77,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.415270"
+        },
+        {
+          "task_id": "route_web_1",
+          "suite": "routing",
+          "input": "搜索 GitHub 上的 Claude Mythos 仓库",
+          "expected_expert": "web_expert",
+          "expected_depth": "normal",
+          "actual_expert": "web_expert",
+          "actual_depth": "normal",
+          "expert_correct": true,
+          "depth_correct": true,
+          "duration_ms": 79,
+          "success": true,
+          "error": "",
+          "timestamp": "2026-04-22T12:32:24.493160"
+        }
+      ],
+      "duration_ms": 459
+    }
+  ],
+  "summary": {
+    "total_suites": 1,
+    "total_tasks": 6,
+    "total_passed": 5,
+    "overall_accuracy": 83.33333333333334,
+    "total_duration_ms": 459
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "name": "Expert Router Test Suite",
+  "version": "1.0",
+  "description": "Ground truth routing decisions for Expert Router evaluation",
+  "tasks": [
+    {
+      "id": "rt_code_fib",
+      "input": "写一个 Python 函数计算斐波那契数列",
+      "expected_expert": "code_expert",
+      "expected_depth": "normal",
+      "tags": ["code", "python", "function"]
+    },
+    {
+      "id": "rt_code_perf",
+      "input": "分析这段代码的性能并给出优化建议",
+      "expected_expert": "analysis_expert",
+      "expected_depth": "deep",
+      "tags": ["code", "performance", "analysis"]
+    },
+    {
+      "id": "rt_analysis_arch",
+      "input": "分析 Claude Code 的架构设计",
+      "expected_expert": "analysis_expert",
+      "expected_depth": "deep",
+      "tags": ["analysis", "architecture", "claude-code"]
+    },
+    {
+      "id": "rt_memory_recall",
+      "input": "记得我们上次讨论的内容吗",
+      "expected_expert": "memory_expert",
+      "expected_depth": "normal",
+      "tags": ["memory", "recall"]
+    },
+    {
+      "id": "rt_system_gateway",
+      "input": "配置 OpenClaw gateway",
+      "expected_expert": "system_expert",
+      "expected_depth": "fast",
+      "tags": ["system", "config", "gateway"]
+    },
+    {
+      "id": "rt_web_search",
+      "input": "搜索 GitHub 上的 Claude Mythos 仓库",
+      "expected_expert": "web_expert",
+      "expected_depth": "normal",
+      "tags": ["web", "search", "github"]
+    },
+    {
+      "id": "rt_code_debug",
+      "input": "这个 Python 脚本一直报错，请帮我调试",
+      "expected_expert": "code_expert",
+      "expected_depth": "normal",
+      "tags": ["code", "debugging", "python"]
+    },
+    {
+      "id": "rt_analysis_deep",
+      "input": "深入分析 OpenMythos 的 RDT 架构与 Claude Code 的差异",
+      "expected_expert": "analysis_expert",
+      "expected_depth": "deep",
+      "tags": ["analysis", "openMythos", "deep"]
+    },
+    {
+      "id": "rt_system_health",
+      "input": "检查 OpenClaw 系统健康状态",
+      "expected_expert": "system_expert",
+      "expected_depth": "fast",
+      "tags": ["system", "health", "monitoring"]
+    },
+    {
+      "id": "rt_memory_store",
+      "input": "把今天的讨论内容保存到记忆系统",
+      "expected_expert": "memory_expert",
+      "expected_depth": "normal",
+      "tags": ["memory", "store"]
+    }
+  ]
+}

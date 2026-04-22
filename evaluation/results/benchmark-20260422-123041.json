@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-04-22T12:30:41.978170",
+  "suites": [
+    {
+      "suite": "routing",
+      "name": "Expert Router Routing Quality",
+      "total": 6,
+      "passed": 0,
+      "accuracy": 0.0,
+      "task_results": [
+        {
+          "task_id": "route_code_1",
+          "suite": "routing",
+          "input": "写一个 Python 函数计算斐波那契数列",
+          "expected_expert": "code_expert",
+          "expected_depth": "normal",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 93,
+          "success": false,
+          "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 332, in <module>\n    result = router.classify(message)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 231, in classify\n    depth = DEPTH_CONFIG[best_expert][\"preferred_depth\"]\n            ~~~~~~~~~~~~^^^^^^^^^^^^^\nKeyError: 'code_expert'",
+          "timestamp": "2026-04-22T12:30:41.457480"
+        },
+        {
+          "task_id": "route_code_2",
+          "suite": "routing",
+          "input": "分析这段代码的性能并给出优化建议",
+          "expected_expert": "code_expert",
+          "expected_depth": "deep",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 89,
+          "success": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "timestamp": "2026-04-22T12:30:41.551419"
+        },
+        {
+          "task_id": "route_analysis_1",
+          "suite": "routing",
+          "input": "分析 Claude Code 的架构设计",
+          "expected_expert": "analysis_expert",
+          "expected_depth": "deep",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 80,
+          "success": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "timestamp": "2026-04-22T12:30:41.640451"
+        },
+        {
+          "task_id": "route_memory_1",
+          "suite": "routing",
+          "input": "记得我们上次讨论的内容吗",
+          "expected_expert": "memory_expert",
+          "expected_depth": "normal",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 83,
+          "success": false,
+          "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 332, in <module>\n    result = router.classify(message)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 231, in classify\n    depth = DEPTH_CONFIG[best_expert][\"preferred_depth\"]\n            ~~~~~~~~~~~~^^^^^^^^^^^^^\nKeyError: 'memory_expert'",
+          "timestamp": "2026-04-22T12:30:41.721297"
+        },
+        {
+          "task_id": "route_system_1",
+          "suite": "routing",
+          "input": "配置 OpenClaw gateway",
+          "expected_expert": "system_expert",
+          "expected_depth": "fast",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 84,
+          "success": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "timestamp": "2026-04-22T12:30:41.805582"
+        },
+        {
+          "task_id": "route_web_1",
+          "suite": "routing",
+          "input": "搜索 GitHub 上的 Claude Mythos 仓库",
+          "expected_expert": "web_expert",
+          "expected_depth": "normal",
+          "actual_expert": "",
+          "actual_depth": "",
+          "expert_correct": false,
+          "depth_correct": false,
+          "duration_ms": 87,
+          "success": false,
+          "error": "Traceback (most recent call last):\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 332, in <module>\n    result = router.classify(message)\n             ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\Administrator\\.openclaw\\workspace\\modules\\expert_router.py\", line 231, in classify\n    depth = DEPTH_CONFIG[best_expert][\"preferred_depth\"]\n            ~~~~~~~~~~~~^^^^^^^^^^^^^\nKeyError: 'web_expert'",
+          "timestamp": "2026-04-22T12:30:41.890259"
+        }
+      ],
+      "duration_ms": 520
+    }
+  ],
+  "summary": {
+    "total_suites": 1,
+    "total_tasks": 6,
+    "total_passed": 0,
+    "overall_accuracy": 0.0,
+    "total_duration_ms": 520
+  }
+}
