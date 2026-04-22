@@ -12,6 +12,8 @@ triggers:
   - invest
   - macro
   - quant
+  - geopolitics
+  - 地缘政治
   - 宏观分析
   - 量化因子
   - FRED
@@ -49,6 +51,14 @@ Ticker Input
     │
     ├─► [Risk Manager]                ← ai-hedge-fund inspiration
     │     Annualized volatility + correlation adjustment + position limits
+    │
+    ├─► [MacroExpert]  ← FinceptTerminal
+    │     FRED + IMF + WorldBank → PolicyStance + YieldCurve + RecessionProb
+    │     RESTRICTIVE → Kelly -20% | EXPANSIVE → Kelly +10%
+    │
+    ├─► [GeopoliticsExpert]  ← FinceptTerminal
+    │     Sanctions / Tariffs / Supply Chain / Taiwan Strait
+    │     Risk score + position adjustment + warnings
     │
     └─► [Portfolio Aggregator]        ← Kelly Criterion + risk-adjusted scoring
           aggregates signals → BUY/HOLD/SELL/REDUCE + position size

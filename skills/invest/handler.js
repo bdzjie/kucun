@@ -3,8 +3,10 @@
 // Inspired by:
 //   - github.com/virattt/ai-hedge-fund (LangGraph multi-agent, risk manager)
 //   - github.com/ivebotunac/PrimoAgent (news_intelligence_agent, sentiment analysis)
+//   - FinceptTerminal (macro expert + geopolitics expert integration)
 
 import { writeFileSync } from 'fs';
+import { execSync } from 'child_process';
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +25,153 @@ const INVESTORS = {
   pabrai:      { name: "Mohnish Pabrai",          weight: 1.0,  style: "dhandho" },
   jhunjhunwala:{ name: "Rakesh Jhunjhunwala",     weight: 0.9,  style: "emerging" },
 };
+
+// ─── PYTHON BRIDGE — Macro + Geopolitics Experts ────────────────────────────
+// Calls Python modules: macro_expert.py + geopolitics_expert.py
+// Returns JSON for integration into the invest report
+
+const WORKSPACE = 'C:/Users/Administrator/.openclaw/workspace';
+const PY = 'python'; // 'python' or 'python3'
+
+/**
+ * Call macro_expert.py — returns macroeconomic context + policy stance
+ */
+async function fetchMacroContext() {
+  try {
+    const scriptPath = `${WORKSPACE}/modules/invest/macro_expert.py`;
+    const output = execSync(`${PY} "${scriptPath}"`, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+    });
+    // Python prints to stdout, capture last JSON block
+    const lines = output.trim().split('\n');
+    const jsonStart = output.lastIndexOf('{');
+    if (jsonStart < 0) return null;
+    const raw = output.slice(jsonStart);
+    return JSON.parse(raw);
+  } catch (e) {
+    // Macro expert may fail silently (network issues), return null
+    return null;
+  }
+}
+
+/**
+ * Call geopolitics_expert.py via invest_bridge.py
+ * Analyzes: sanctions / tariffs / supply chain / regional conflict risks
+ */
+async function fetchGeopoliticsRisk(ticker, sector = '综合') {
+  try {
+    const scriptPath = `${WORKSPACE}/modules/invest/geopolitics_expert.py`;
+    const cmd = `${PY} "${scriptPath}" "${ticker}" "${sector}"`;
+    const output = execSync(cmd, {
+      encoding: 'utf-8',
+      timeout: 15000,
+      maxBuffer: 512 * 1024,
+    });
+    const jsonStart = output.lastIndexOf('{');
+    if (jsonStart < 0) return null;
+    return JSON.parse(output.slice(jsonStart));
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Adjust Kelly fraction based on macro policy stance.
+ * Restrictive policy → reduce position; Expansive → hold/increase.
+ */
+function adjustPositionByMacro(verdict, macroCtx) {
+  if (!macroCtx || !macroCtx.policy_stance) return verdict;
+
+  const stance = macroCtx.policy_stance;
+  const adjustment = {
+    RESTRICTIVE: -0.20,  // High rates: reduce 20%
+    NEUTRAL:      0.00,  // No change
+    EXPANSIVE:    0.10,  // Low rates: add 10%
+    UNKNOWN:       0.00,
+  }[stance] || 0;
+
+  const adjKelly = Math.max(0.02, verdict.kellyFraction / 100 + adjustment);
+  const adjAction = adjKelly > 0.20 ? 'BUY' : adjKelly > 0.08 ? 'HOLD' : 'REDUCE';
+
+  return {
+    ...verdict,
+    kellyFraction: Math.round(adjKelly * 1000) / 10,
+    adjustedKelly: Math.round(adjKelly * 1000) / 10,
+    macroAdjustment: `${adjustment >= 0 ? '+' : ''}${(adjustment * 100).toFixed(0)}%`,
+    adjustedAction: adjAction,
+    policyStance: stance,
+    recessionProb: macroCtx.recession_prob || 0,
+    growthOutlook: macroCtx.growth_outlook || 'unknown',
+  };
+}
+
+/**
+ * Format macro section for the report
+ */
+function formatMacroReport(macroCtx) {
+  if (!macroCtx) return '';
+
+  const stanceEmoji = {
+    RESTRICTIVE: '🔴',
+    NEUTRAL: '🟡',
+    EXPANSIVE: '🟢',
+    UNKNOWN: '⚪',
+  }[macroCtx.policy_stance] || '⚪';
+
+  const lines = [
+    `\n| 指标 | 数值 |`,
+    `|--------|------|`,
+    `| 政策立场 | ${stanceEmoji} ${macroCtx.policy_stance || 'UNKNOWN'} |`,
+    `| 置信度 | ${((macroCtx.policy_confidence || 0) * 100).toFixed(0)}% |`,
+    `| 增长展望 | ${macroCtx.growth_outlook || 'N/A'} |`,
+    `| 通胀风险 | ${macroCtx.inflation_risk || 'N/A'} |`,
+    `| 衰退概率 | ${((macroCtx.recession_prob || 0) * 100).toFixed(0)}% |`,
+    `| 曲线形态 | ${macroCtx.yield_curve_shape || 'N/A'} |`,
+  ];
+
+  if (macroCtx.key_risks && macroCtx.key_risks.length > 0) {
+    lines.push(`| 关键风险 | ${macroCtx.key_risks.slice(0, 2).join(' | ')} |`);
+  }
+
+  return '\n' + lines.join('\n') + '\n';
+}
+
+/**
+ * Format geopolitics section for the report
+ */
+function formatGeopoliticsReport(geoResult) {
+  if (!geoResult || !geoResult.geopolitics) return '';
+
+  const geo = geoResult.geopolitics;
+  const levelEmoji = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' };
+  const emoji = levelEmoji[geo.risk_level] || '⚪';
+
+  const lines = [
+    `\n| 地缘风险 | ${emoji} **${geo.risk_level.toUpperCase()}** (评分 ${(geo.risk_score * 100).toFixed(0)}%) |`,
+    `| 仓位调整 | ${geo.position_adjustment >= 0 ? '+' : ''}${(geo.position_adjustment * 100).toFixed(0)}% |`,
+    `| 行业 | ${geo.sector} |`,
+  ];
+
+  if (geo.warnings && geo.warnings.length > 0) {
+    lines.push(`| 警告 | ${geo.warnings[0]} |`);
+  }
+
+  // Top risks
+  if (geo.risks && geo.risks.length > 0) {
+    const topRisks = geo.risks.slice(0, 3);
+    lines.push('');
+    lines.push('**主要风险:**');
+    for (const r of topRisks) {
+      const rEmoji = r.risk_score > 0.6 ? '🔴' : r.risk_score > 0.3 ? '🟠' : '🟡';
+      lines.push(`- ${rEmoji} ${r.description || r.type} (${(r.risk_score * 100).toFixed(0)}%)`);
+    }
+  }
+
+  return '\n' + lines.join('\n') + '\n';
+}
+
 
 // ─── NEWS SENTIMENT AGENT ───────────────────────────────────────────────────────
 // Inspired by PrimoAgent news_intelligence_agent.py
@@ -1131,6 +1280,13 @@ export default async function handler(input, context) {
   const closes = priceHistory.map(p => p.close);
   const riskData = await analyzeRisk(ticker, closes.length > 0 ? closes : [stockData.price]);
 
+  // ── 4b. Macro + Geopolitics (Python experts) ─────────────────────────────
+  // Fetch macro context and geopolitical risk in parallel
+  const [macroCtx, geoResult] = await Promise.all([
+    fetchMacroContext(),
+    fetchGeopoliticsRisk(ticker, profile?.sector || '综合'),
+  ]);
+
   // ── 5. Generate investor signals ─────────────────────────────────────────
   const signals = [];
   for (const key of selectedInvestors) {
@@ -1141,7 +1297,10 @@ export default async function handler(input, context) {
   }
 
   // ── 6. Portfolio aggregation ──────────────────────────────────────────────
-  const verdict = aggregateSignals(signals, riskData);
+  let verdict = aggregateSignals(signals, riskData);
+
+  // ── 6b. Macro-adjusted verdict ───────────────────────────────────────────
+  verdict = adjustPositionByMacro(verdict, macroCtx);
 
   // ── 8. Performance metrics ───────────────────────────────────────────────
   const dailyReturns = [];
@@ -1222,6 +1381,55 @@ export default async function handler(input, context) {
     report += `| 风险警告 | ${riskData.warnings.join(' | ')} |\n`;
   }
   report += `\n`;
+
+  // ── Macro + Geopolitics (if available) ──────────────────────────────────
+  if (macroCtx) {
+    report += `---
+
+## 🌍 宏观分析 (FinceptTerminal)\n\n`;
+    report += `| 指标 | 数值 |\n|--------|------|\n`;
+    report += `| 政策立场 | ${
+      macroCtx.policy_stance === 'RESTRICTIVE' ? '🔴 紧缩' :
+      macroCtx.policy_stance === 'EXPANSIVE' ? '🟢 宽松' :
+      macroCtx.policy_stance === 'NEUTRAL' ? '🟡 中性' : '⚪ 未知'
+    } |\n`;
+    report += `| 增长展望 | ${macroCtx.growth_outlook || 'N/A'} |\n`;
+    report += `| 通胀风险 | ${macroCtx.inflation_risk || 'N/A'} |\n`;
+    report += `| 衰退概率 | ${((macroCtx.recession_prob || 0) * 100).toFixed(0)}% |\n`;
+    report += `| 曲线形态 | ${macroCtx.yield_curve_shape || 'N/A'} |\n`;
+    if (macroCtx.key_risks && macroCtx.key_risks.length > 0) {
+      report += `| 关键风险 | ${macroCtx.key_risks[0]} |\n`;
+    }
+    if (verdict.policyStance) {
+      report += `\n**宏观仓位调整:** ${verdict.macroAdjustment} → Kelly仓位调整为 ${verdict.kellyFraction}%\n`;
+    }
+    report += `\n`;
+  }
+
+  if (geoResult && geoResult.geopolitics) {
+    const geo = geoResult.geopolitics;
+    report += `---
+
+## 🗺️ 地缘政治风险 (FinceptTerminal)\n\n`;
+    report += `| 地缘风险 | ${
+      geo.risk_level === 'critical' ? '🔴 CRITICAL' :
+      geo.risk_level === 'high' ? '🟠 HIGH' :
+      geo.risk_level === 'medium' ? '🟡 MEDIUM' : '🟢 LOW'
+    } (评分 ${(geo.risk_score * 100).toFixed(0)}%) |\n`;
+    report += `| 仓位调整 | ${geo.position_adjustment >= 0 ? '+' : ''}${(geo.position_adjustment * 100).toFixed(0)}% |\n`;
+    report += `| 行业 | ${geo.sector} |\n`;
+    if (geo.warnings && geo.warnings.length > 0) {
+      report += `| 警告 | ${geo.warnings[0]} |\n`;
+    }
+    if (geo.risks && geo.risks.length > 0) {
+      report += `\n**主要风险:**\n`;
+      for (const r of geo.risks.slice(0, 3)) {
+        const emoji = r.risk_score > 0.6 ? '🔴' : r.risk_score > 0.3 ? '🟠' : '🟡';
+        report += `- ${emoji} ${r.description || r.type}\n`;
+      }
+    }
+    report += `\n`;
+  }
 
   // Performance metrics (backtest-style)
   if (perfMetrics.sharpe !== null) {
@@ -1314,32 +1522,72 @@ export default async function handler(input, context) {
   report += `\n`;
 
   // Aggregated verdict
-  report += `---\n\n## 🎯 综合决策\n\n`;
-  report += `**${verdictEmoji} ${verdict.action}** (置信度: ${verdict.confidence}%)\n\n`;
-  report += `**原始评分:** ${verdict.rawScore > 0 ? '+' : ''}${(verdict.rawScore * 100).toFixed(0)}/100\n`;
-  report += `**风险调整:** ${verdict.volAdjusted ? '(已按波动率调整)' : '(无需调整)'}\n\n`;
-  report += `**核心理由:** ${verdict.reasoning}\n\n`;
-  report += `**${verdict.positionRecommendation}**\n\n`;
-  report += `**投票分布:**\n`;
-  report += `- 🟢 买入(BUY): ${verdict.counts.BUY}/${signals.length}\n`;
-  report += `- 🟡 持有(HOLD): ${verdict.counts.HOLD}/${signals.length}\n`;
-  report += `- 🔴 卖出(SELL): ${verdict.counts.SELL}/${signals.length}\n`;
-  report += `- ⚠️ 减仓(REDUCE): ${verdict.counts.REDUCE}/${signals.length}\n\n`;
+  const finalAction = verdict.adjustedAction || verdict.action;
+  const finalKelly = verdict.adjustedKelly || verdict.kellyFraction;
+  const finalEmoji = { BUY: '🟢', HOLD: '🟡', SELL: '🔴', REDUCE: '⚠️' }[finalAction] || '⚪';
+
+  report += `---
+
+## 🎯 综合决策
+
+`;
+  report += `**${finalEmoji} ${finalAction}** (置信度: ${verdict.confidence}%)
+
+`;
+  report += `**原始评分:** ${verdict.rawScore > 0 ? '+' : ''}${(verdict.rawScore * 100).toFixed(0)}/100
+`;
+  report += `**风险调整:** ${verdict.volAdjusted ? '(已按波动率调整)' : '(无需调整)'}
+`;
+  if (verdict.policyStance) {
+    report += `**宏观调整:** ${verdict.macroAdjustment} → Kelly仓位 ${finalKelly}%
+`;
+  } else {
+    report += `**Kelly仓位:** ${verdict.kellyFraction}%
+`;
+  }
+  report += `
+`;
+  report += `**核心理由:** ${verdict.reasoning}
+
+`;
+  const recText = finalKelly > 20 ? '建议买入' : finalKelly > 8 ? '观望' : '建议减仓';
+  report += `**${recText}** (Kelly ${finalKelly}%)
+
+`;
+  report += `**投票分布:**
+`;
+  report += `- 🟢 买入(BUY): ${verdict.counts.BUY}/${signals.length}
+`;
+  report += `- 🟡 持有(HOLD): ${verdict.counts.HOLD}/${signals.length}
+`;
+  report += `- 🔴 卖出(SELL): ${verdict.counts.SELL}/${signals.length}
+`;
+  report += `- ⚠️ 减仓(REDUCE): ${verdict.counts.REDUCE}/${signals.length}
+
+`;
 
   // Risk warnings
   const riskSignals = signals.filter(s =>
     ['taleb','graham','burry'].some(k => INVESTORS[k]?.name === s.name) &&
     (s.action === 'SELL' || s.action === 'REDUCE')
   );
-  if (riskSignals.length > 0 || riskData.warnings.length > 0) {
-    report += `⚠️ **风险警告:**\n`;
-    if (riskSignals.length > 0) report += `- Taleb/Graham/Burry 等风险导向型分析师发出减仓/卖出信号\n`;
-    for (const w of riskData.warnings) report += `- ${w}\n`;
-    report += `\n`;
+  if (riskSignals.length > 0 || riskData.warnings.length > 0 || (geoResult && geoResult.geopolitics)) {
+    report += `⚠️ **风险警告:**
+`;
+    if (riskSignals.length > 0) report += `- Taleb/Graham/Burry 等风险导向型分析师发出减仓/卖出信号
+`;
+    for (const w of riskData.warnings) report += `- ${w}
+`;
+    if (geoResult && geoResult.geopolitics && geoResult.geopolitics.warnings) {
+      for (const w of geoResult.geopolitics.warnings.slice(0, 2)) report += `- 🗺️ ${w}
+`;
+    }
+    report += `
+`;
   }
 
-  report += `---\n`;
-  report += `*投资有风险，决策前请咨询专业财务顾问。本分析基于公开市场数据和量化模型，不保证准确性。*\n`;
+  report += `---
+`;
 
   return {
     success: true,
