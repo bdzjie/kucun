@@ -43,6 +43,8 @@ import {
 
 import { globalToolRegistry, type ToolContext } from '../registry/registry'
 
+import { RoutingService, routingService } from './routing_service'
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -120,6 +122,10 @@ export class AIAgent {
   // Lifecycle
   private disposed = false
 
+  // Routing
+  private routingService: RoutingService
+  private currentRoute: ReturnType<RoutingService['classify']> | null = null
+
   constructor(config: AgentConfig, callbacks: AgentCallbacks = {}) {
     this.config = {
       id: config.id,
@@ -133,6 +139,7 @@ export class AIAgent {
 
     this.callbacks = callbacks
     this.providerResolver = new ProviderResolver()
+    this.routingService = routingService  // Use singleton
     this.session = this.createSession()
 
     // Set up abort controller
@@ -257,6 +264,18 @@ export class AIAgent {
     this.setState('running')
 
     try {
+      // ─────────────────────────────────────────────────────────────
+      // Expert Router: Classify task and determine reasoning depth
+      // ─────────────────────────────────────────────────────────────
+      this.currentRoute = await this.routingService.classify(userMessage)
+      this.session.routingResult = {
+        expert: this.currentRoute.expert,
+        taskType: this.currentRoute.task_type,
+        depth: this.currentRoute.depth,
+        confidence: this.currentRoute.confidence,
+        skills: this.currentRoute.skills,
+      }
+
       // Add user message
       this.messages.push({ role: 'user', content: userMessage })
 
@@ -356,6 +375,11 @@ export class AIAgent {
         this.currentTurn!.assistantMessage = message.content as string
         this.endTurn('completed')
 
+        // ─────────────────────────────────────────────────────────────
+        // Record routing feedback (success case)
+        // ─────────────────────────────────────────────────────────────
+        this.recordRoutingFeedback(true, 'good')
+
         return {
           success: true,
           message: message.content as string,
@@ -371,6 +395,9 @@ export class AIAgent {
     } catch (error: any) {
       this.setState('error')
       this.callbacks.onError?.(error)
+
+      // Record routing feedback (failure case)
+      this.recordRoutingFeedback(false, 'poor')
 
       return {
         success: false,
@@ -434,6 +461,7 @@ export class AIAgent {
 
   private handleInterrupt(): AgentResult {
     this.endTurn('interrupted')
+    this.recordRoutingFeedback(false, 'partial')
 
     return {
       success: false,
@@ -448,6 +476,7 @@ export class AIAgent {
 
     this.endTurn('pending')
     this.setState('max_turns_exceeded')
+    this.recordRoutingFeedback(false, 'partial')
 
     return {
       success: false,
@@ -555,8 +584,19 @@ export class AIAgent {
   }
 
   // ============================================================================
-  // Compression
+  // Compression (depth-aware via Expert Router)
   // ============================================================================
+
+  private getDepthThreshold(): { normal: number; aggressive: number } {
+    // OpenMythos-style: deep mode compresses earlier to leave room for reasoning
+    if (this.currentRoute?.depth === 'deep') {
+      return { normal: 0.60, aggressive: 0.75 }
+    }
+    if (this.currentRoute?.depth === 'fast') {
+      return { normal: 0.90, aggressive: 0.95 }
+    }
+    return { normal: COMPRESSION_THRESHOLD, aggressive: COMPRESSION_AGGRESSIVE_THRESHOLD }
+  }
 
   private async checkPreflight(): Promise<PreflightCheck> {
     const contextUsage = this.estimateContextUsage()
@@ -571,20 +611,22 @@ export class AIAgent {
   }
 
   private shouldCompress(preflight: PreflightCheck): CompressionDecision {
-    // Aggressive compression if above 85%
-    if (preflight.percentUsed > COMPRESSION_AGGRESSIVE_THRESHOLD) {
+    const depthThreshold = this.getDepthThreshold()
+
+    // Aggressive compression if above depth-specific threshold
+    if (preflight.percentUsed > depthThreshold.aggressive) {
       return {
         shouldCompress: true,
-        reason: 'Context exceeds 85% - aggressive compression',
+        reason: `Context exceeds ${(depthThreshold.aggressive * 100).toFixed(0)}% - aggressive compression (${this.currentRoute?.depth} mode)`,
         protectedMessages: COMPRESSION_AGGRESSIVE_PROTECT_N,
       }
     }
 
-    // Normal compression above 50%
-    if (preflight.percentUsed > COMPRESSION_THRESHOLD) {
+    // Normal compression above depth-specific threshold
+    if (preflight.percentUsed > depthThreshold.normal) {
       return {
         shouldCompress: true,
-        reason: 'Context exceeds 50% threshold',
+        reason: `Context exceeds ${(depthThreshold.normal * 100).toFixed(0)}% threshold (${this.currentRoute?.depth} mode)`,
         protectedMessages: COMPRESSION_PROTECT_LAST_N,
       }
     }
@@ -649,6 +691,36 @@ export class AIAgent {
 
   getMessages(): Message[] {
     return [...this.messages]
+  }
+
+  /**
+   * Record routing feedback after task completion
+   * Used by feedback loop to adjust expert weights
+   */
+  private recordRoutingFeedback(
+    taskSuccess: boolean,
+    quality: 'good' | 'partial' | 'poor'
+  ): void {
+    if (!this.currentRoute) return
+
+    try {
+      this.routingService.recordFeedback(
+        {
+          task_type: this.currentRoute.task_type,
+          expert: this.currentRoute.expert,
+          skills: this.currentRoute.skills,
+          depth: this.currentRoute.depth,
+          confidence: this.currentRoute.confidence,
+          matched_keywords: [],
+        },
+        taskSuccess,
+        quality,
+        this.iterationNumber
+      )
+    } catch (err) {
+      // Non-fatal: feedback recording should not break the agent
+      console.warn('[AIAgent] Failed to record routing feedback:', err)
+    }
   }
 
   getSession(): Session {

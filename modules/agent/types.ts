@@ -83,6 +83,14 @@ export interface Session {
   updatedAt: number
   endedAt?: number
   endReason?: 'completed' | 'interrupted' | 'budget_exceeded' | 'error' | 'user_exit'
+  // Routing metadata (from Expert Router)
+  routingResult?: {
+    expert: string
+    taskType: string
+    depth: 'fast' | 'normal' | 'deep'
+    confidence: number
+    skills: string[]
+  }
 }
 
 // ============================================================================
