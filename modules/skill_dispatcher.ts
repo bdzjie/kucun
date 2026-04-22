@@ -113,9 +113,13 @@ export class SkillDispatcher {
 
   /**
    * Execute a skill by slug.
-   * Returns dispatch result.
+   * Passes skillContext so handlers can adapt behavior (depth-aware timeouts, etc.)
    */
-  async dispatchSkill(slug: string, context: Record<string, unknown>): Promise<DispatchResult> {
+  async dispatchSkill(
+    slug: string,
+    context: Record<string, unknown>,
+    skillContext?: { chain: SkillChainItem[]; expert: string; depth: string; confidence: number; iteration: number }
+  ): Promise<DispatchResult> {
     const start = Date.now()
     const skillPath = resolve(this.skillsDir, slug, 'SKILL.md')
     const handlerPath = resolve(this.skillsDir, slug, 'handler.js')
@@ -132,7 +136,9 @@ export class SkillDispatcher {
         const handler = await import(handlerPath)
         const fn = handler.handle || handler.execute || handler.run
         if (typeof fn === 'function') {
-          const output = await fn(context)
+          // Inject skillContext into event so handlers can read depth/expert/chain
+          const event = { ...context, skillContext }
+          const output = await fn(event)
           return { skill: slug, success: true, output, duration: Date.now() - start }
         }
       } catch (err: any) {
@@ -146,7 +152,7 @@ export class SkillDispatcher {
       return {
         skill: slug,
         success: true,
-        output: { description: 'No handler; skill loaded as context', slug },
+        output: { description: 'No handler; skill loaded as context', slug, skillContext },
         duration: Date.now() - start,
       }
     } catch (err: any) {
@@ -158,12 +164,16 @@ export class SkillDispatcher {
    * Execute full chain until first success or all complete.
    * Stops early if a skill succeeds (fail-fast for most cases).
    */
-  async executeChain(chain: SkillChainItem[], context: Record<string, unknown>): Promise<ChainExecutionResult> {
+  async executeChain(
+    chain: SkillChainItem[],
+    context: Record<string, unknown>,
+    skillContext?: { chain: SkillChainItem[]; expert: string; depth: string; confidence: number; iteration: number }
+  ): Promise<ChainExecutionResult> {
     const results: DispatchResult[] = []
     const start = Date.now()
 
     for (const item of chain) {
-      const result = await this.dispatchSkill(item.slug, context)
+      const result = await this.dispatchSkill(item.slug, context, skillContext)
       results.push(result)
 
       // Fail-fast: stop on first success for fast/normal depth
