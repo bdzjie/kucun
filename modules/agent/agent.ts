@@ -734,6 +734,50 @@ export class AIAgent {
       remaining: this.config.maxTurns - this.iterationNumber,
     }
   }
+
+  /**
+   * Get current reasoning depth badge for UI display.
+   * Renders as: ⚡ fast | code_expert | 0.92
+   * Returns empty string if no routing decision has been made yet.
+   */
+  getRoutingBadge(): string {
+    if (!this.currentRoute) return ''
+    return this.routingService.formatRoutingBadge(this.currentRoute)
+  }
+
+  /**
+   * Get prioritized skill list for current routing decision.
+   * Used by agent to prioritize which skills to invoke for the current task.
+   */
+  getSkillPriority(): string[] {
+    if (!this.currentRoute) return []
+    return this.routingService.getSkillPriority(this.currentRoute)
+  }
+
+  /**
+   * Get full routing info for the current session.
+   * Useful for /studio and UI panels.
+   */
+  getRoutingInfo(): {
+    expert: string
+    taskType: string
+    depth: 'fast' | 'normal' | 'deep'
+    confidence: number
+    skills: string[]
+    skillPriority: string[]
+    badge: string
+  } | null {
+    if (!this.currentRoute || !this.session.routingResult) return null
+    return {
+      expert: this.currentRoute.expert,
+      taskType: this.currentRoute.task_type,
+      depth: this.currentRoute.depth,
+      confidence: this.currentRoute.confidence,
+      skills: this.currentRoute.skills,
+      skillPriority: this.routingService.getSkillPriority(this.currentRoute),
+      badge: this.routingService.formatRoutingBadge(this.currentRoute),
+    }
+  }
 }
 
 // ============================================================================

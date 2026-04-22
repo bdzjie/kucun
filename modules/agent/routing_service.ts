@@ -62,8 +62,9 @@ export class RoutingService {
   }
 
   /**
-   * Classify a user message and return routing decision
-   * Uses cache if same message is classified twice
+   * Classify a user message and return routing decision.
+   * Confidence threshold: > 0.8 → auto-route, ≤ 0.8 → downgrade to normal.
+   * Uses cache if same message is classified twice.
    */
   async classify(message: string): Promise<RouteResult> {
     // Check cache (short-term, same message)
@@ -73,6 +74,18 @@ export class RoutingService {
 
     try {
       const result = await this.runPythonRouter(message)
+
+      // Confidence threshold: downgrade to normal if confidence ≤ 0.8
+      const CONFIDENCE_THRESHOLD = 0.8
+      if (result.confidence > 0 && result.confidence <= CONFIDENCE_THRESHOLD) {
+        const originalDepth = result.depth
+        result.depth = 'normal'
+        console.log(
+          `[RoutingService] Confidence ${result.confidence.toFixed(2)} ≤ ${CONFIDENCE_THRESHOLD} ` +
+          `→ downgraded depth from ${originalDepth} to normal`
+        )
+      }
+
       this.cache = result
       this.cacheMessage = message
       return result
@@ -301,28 +314,73 @@ export class RoutingService {
     return { adjustedExperts, recommendations }
   }
 
-  private getMaxToolCalls(depth: ReasoningDepth): number {
-    const map: Record<ReasoningDepth, number> = {
-      fast: 1,
-      normal: 3,
-      deep: 8,
+  /**
+   * Get ranked skill list for the current routing decision.
+   * Skills from router are ordered by priority (first = highest).
+   * Used by AIAgent to prioritize skill execution.
+   */
+  getSkillPriority(routeResult: RouteResult): string[] {
+    if (!routeResult.skills || routeResult.skills.length === 0) {
+      return this.getDefaultSkillPriority(routeResult.depth)
     }
-    return map[depth] ?? 3
+
+    // Prepend expert-specific skills with router ordering
+    const expertSkills = this.getExpertSkills(routeResult.expert)
+    const orderedSkills = [...routeResult.skills]
+
+    // Inject expert skills that aren't already in the list
+    for (const skill of expertSkills) {
+      if (!orderedSkills.includes(skill)) {
+        if (routeResult.confidence > 0.8) {
+          orderedSkills.unshift(skill)
+        } else {
+          orderedSkills.push(skill)
+        }
+      }
+    }
+
+    return orderedSkills
   }
 
-  private async saveWeights(
-    expertQuality: Record<string, { good: number; poor: number; total: number }>
-  ): Promise<void> {
-    const weights = {
-      updatedAt: Date.now(),
-      expertQuality,
+  /**
+   * Expert-specific skill chains (OpenMythos-style MoE)
+   */
+  private getExpertSkills(expert: string): string[] {
+    const expertSkillMap: Record<string, string[]> = {
+      code_expert: ['exec-inline', 'tdd', 'debugging'],
+      analysis_expert: ['session-replay', 'session-search'],
+      memory_expert: ['memory-assistant', 'fluid-memory'],
+      web_expert: ['web-scraping', 'agent-browser'],
+      system_expert: ['studio', 'healthcheck'],
+      general: ['session-manager'],
     }
-    fs.writeFileSync(this.weightsPath, JSON.stringify(weights, null, 2))
+    return expertSkillMap[expert] ?? []
+  }
+
+  /**
+   * Fallback skill priority when router returns no skills
+   */
+  private getDefaultSkillPriority(depth: ReasoningDepth): string[] {
+    if (depth === 'deep') {
+      return ['session-replay', 'session-search', 'memory-assistant', 'session-manager']
+    }
+    if (depth === 'fast') {
+      return ['exec-inline', 'windows-gui']
+    }
+    return ['session-manager', 'session-replay']
+  }
+
+  /**
+   * Format routing info as a readable status line for UI display.
+   * Renders as: [⚡ fast | code_expert | 0.92]
+   */
+  formatRoutingBadge(routeResult: RouteResult): string {
+    const depthIcons: Record<ReasoningDepth, string> = {
+      fast: '⚡',
+      normal: '🔍',
+      deep: '🧠',
+    }
+    const icon = depthIcons[routeResult.depth] ?? '🔍'
+    return `${icon} ${routeResult.depth} | ${routeResult.expert} | ${routeResult.confidence.toFixed(2)}`
   }
 }
-
-// ============================================================================
-// Singleton export
-// ============================================================================
-
-export const routingService = new RoutingService()
