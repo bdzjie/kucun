@@ -1,6 +1,6 @@
 # MEMORY.md â€” é•¿æœŸè®°å¿†
 
-*æœ€åæ›´æ–°: 2026-04-20*
+*æœ€åæ›´æ–°: 2026-04-22*
 
 ---
 
@@ -217,3 +217,46 @@ memory/skill_index.json         # Skillç´¢å¼•ï¼ˆ41ä¸ªæŠ€èƒ½ï¼‰
 ---
 
 *è¯¦ç»†å†å²è®°å½•: `memory/archived/detailed-analyses.md`*
+
+## FinceptTerminal Éî¶È·ÖÎö (2026-04-22)
+
+**²Ö¿â**: Fincept-Corporation/FinceptTerminal
+**·ÖÎöÎÄ¼ş**: memory/fincept-terminal-analysis.md (7.8KB)
+
+### ºËĞÄ¼Ü¹¹
+
+- **ËÄ²ã¼Ü¹¹**: UI(Qt6) ¡ú Application(40+ Screens) ¡ú Infrastructure ¡ú Platform
+- **Screen/Service ·ÖÀë**: Ã¿¸ö Screen Ö»äÖÈ¾ UI£¬Service ´¦ÀíÒµÎñÂß¼­
+- **Python Ç¶Èë**: PyBind11 Á¬½Ó C++/Python£¨Á¿»¯·ÖÎö/ML£©
+- **37 AI Agents**: Trader(13) + Economic + Geopolitics Èı¸ö¿ò¼Ü
+- **100+ Data Connectors**: FRED/IMF/World Bank/AkShare/Kraken µÈ
+- **20+ Broker**: Zerodha/Alpaca/IBKR/Saxo µÈ
+
+### ½ñÈÕÒÑÊµÏÖÔöÇ¿
+
+| Ä£¿é | ÎÄ¼ş | ¹¦ÄÜ |
+|------|------|------|
+| data_connectors | modules/invest/data_connectors.py | 4´óÊı¾İÔ´Í³Ò»½Ó¿Ú |
+| macro_expert | modules/invest/macro_expert.py | »õ±ÒÕş²ß·ÖÎö |
+| quant_factors | modules/invest/quant_factors.py | VaR/Sharpe/RSI/MACD |
+
+---
+
+
+## FinceptTerminal (2026-04-22)
+
+Repository: Fincept-Corporation/FinceptTerminal
+Analysis: memory/fincept-terminal-analysis.md
+
+Key Architecture:
+- 4-layer: UI(Qt6) / Application(40+ screens) / Infrastructure / Platform
+- Screen/Service separation pattern (most valuable design)
+- PyBind11 embedded Python (quant/ML)
+- 37 AI Agents (Trader/Economic/Geopolitics frameworks)
+- 100+ Data connectors (FRED/IMF/WorldBank/AkShare/Kraken)
+- 20+ Broker integrations (Zerodha/Alpaca/IBKR/Saxo)
+
+Today Completed:
+- modules/invest/data_connectors.py: FRED/IMF/WorldBank/AkShare connectors
+- modules/invest/macro_expert.py: Policy stance + yield curve analysis
+- modules/invest/quant_factors.py: VaR/Sharpe/RSI/MACD/Bollinger/ATR
