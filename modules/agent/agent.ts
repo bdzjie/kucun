@@ -43,7 +43,21 @@ import {
 
 import { globalToolRegistry, type ToolContext } from '../registry/registry'
 
-import { RoutingService, routingService } from './routing_service'
+import { routingService, type RoutingService } from './routing_service'
+import { skillDispatcher, type SkillChainItem } from './skill_dispatcher'
+import type { RouteResult } from './routing_service'
+
+// Routing state written to canvas state file for canvas bridge
+interface RoutingState {
+  expert: string
+  taskType: string
+  depth: 'fast' | 'normal' | 'deep'
+  confidence: number
+  skills: string[]
+  chain: SkillChainItem[]
+  badge: string
+  updatedAt: number
+}
 
 // ============================================================================
 // Constants
@@ -124,7 +138,8 @@ export class AIAgent {
 
   // Routing
   private routingService: RoutingService
-  private currentRoute: ReturnType<RoutingService['classify']> | null = null
+  private currentRoute: RouteResult | null = null
+  private currentChain: SkillChainItem[] = []
 
   constructor(config: AgentConfig, callbacks: AgentCallbacks = {}) {
     this.config = {
@@ -275,6 +290,17 @@ export class AIAgent {
         confidence: this.currentRoute.confidence,
         skills: this.currentRoute.skills,
       }
+
+      // Build skill execution chain from routing decision
+      this.currentChain = this.routingService.getSkillPriority(this.currentRoute).map((slug, i) => ({
+        slug,
+        priority: i,
+        source: 'router' as const,
+        reason: `router[${this.currentRoute.task_type}]`,
+      }))
+
+      // Write routing state to canvas state file (for canvas bridge)
+      this.writeRoutingState()
 
       // Add user message
       this.messages.push({ role: 'user', content: userMessage })
@@ -755,6 +781,14 @@ export class AIAgent {
   }
 
   /**
+   * Get current skill execution chain.
+   * Built at start of run() from routing decision.
+   */
+  getCurrentChain(): SkillChainItem[] {
+    return this.currentChain
+  }
+
+  /**
    * Get full routing info for the current session.
    * Useful for /studio and UI panels.
    */
@@ -765,6 +799,7 @@ export class AIAgent {
     confidence: number
     skills: string[]
     skillPriority: string[]
+    chain: SkillChainItem[]
     badge: string
   } | null {
     if (!this.currentRoute || !this.session.routingResult) return null
@@ -775,7 +810,39 @@ export class AIAgent {
       confidence: this.currentRoute.confidence,
       skills: this.currentRoute.skills,
       skillPriority: this.routingService.getSkillPriority(this.currentRoute),
+      chain: this.currentChain,
       badge: this.routingService.formatRoutingBadge(this.currentRoute),
+    }
+  }
+
+  /**
+   * Write current routing state to canvas state file.
+   * This file is polled by the canvas routing-dashboard.html page.
+   */
+  private writeRoutingState(): void {
+    if (!this.currentRoute) return
+
+    try {
+      const state: RoutingState = {
+        expert: this.currentRoute.expert,
+        taskType: this.currentRoute.task_type,
+        depth: this.currentRoute.depth,
+        confidence: this.currentRoute.confidence,
+        skills: this.currentRoute.skills,
+        chain: this.currentChain,
+        badge: this.routingService.formatRoutingBadge(this.currentRoute),
+        updatedAt: Date.now(),
+      }
+
+      const fs = require('fs')
+      const path = require('path')
+      const statePath = path.join(process.env.HOME || process.env.USERPROFILE || 'C:/Users/Administrator/.openclaw', '.openclaw/canvas/routing_state.json')
+
+      fs.mkdirSync(path.dirname(statePath), { recursive: true })
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2))
+    } catch (err) {
+      // Non-fatal: canvas state should not crash the agent
+      console.warn('[AIAgent] Failed to write routing state:', err)
     }
   }
 }
