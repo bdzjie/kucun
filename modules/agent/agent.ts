@@ -47,6 +47,15 @@ import { routingService, type RoutingService } from './routing_service'
 import { skillDispatcher, type SkillChainItem } from './skill_dispatcher'
 import type { RouteResult } from './routing_service'
 
+// Routing state + skill chain context passed to tools via ToolContext
+interface SkillExecContext {
+  chain: SkillChainItem[]
+  expert: string
+  depth: 'fast' | 'normal' | 'deep'
+  confidence: number
+  iteration: number
+}
+
 // Routing state written to canvas state file for canvas bridge
 interface RoutingState {
   expert: string
@@ -302,8 +311,11 @@ export class AIAgent {
       // Write routing state to canvas state file (for canvas bridge)
       this.writeRoutingState()
 
-      // Add user message
-      this.messages.push({ role: 'user', content: userMessage })
+      // Add user message (prepend skill chain directive if chain is non-empty)
+      const skillChainNote = this.currentChain.length > 0
+        ? `\n[Skill Chain] Priority: ${this.currentChain.map(c => c.slug).join(' → ')}\n`
+        : ''
+      this.messages.push({ role: 'user', content: skillChainNote + userMessage })
 
       // Start first turn
       this.startTurn(userMessage)
@@ -551,11 +563,27 @@ export class AIAgent {
 
     this.callbacks.onToolCallStart?.(toolCall)
 
+  private async executeSingleTool(toolCall: ToolCall): Promise<ToolResult> {
+    const startTime = Date.now()
+
+    this.callbacks.onToolCallStart?.(toolCall)
+
     try {
+      // ─── Skill Chain Context Injection ───────────────────────────
+      // Inject routing context into tool execution environment.
+      // Tools can read this from ToolContext.sessionId metadata.
+      const skillContext: SkillExecContext = {
+        chain: this.currentChain,
+        expert: this.currentRoute?.expert ?? 'general',
+        depth: this.currentRoute?.depth ?? 'normal',
+        confidence: this.currentRoute?.confidence ?? 0,
+        iteration: this.iterationNumber,
+      }
+
       const context: ToolContext = {
         cwd: process.cwd(),
         sessionId: this.session.id,
-      }
+        skillContext,  // routing metadata for skill-aware tools
 
       const parsedArgs =
         typeof toolCall.arguments === 'string'
