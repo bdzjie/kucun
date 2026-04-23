@@ -1,7 +1,8 @@
 ---
 name: lobster-debugging
 version: 1.0.0
-"Systematic debugging framework. 4-phase root-cause analysis with defense-in-depth. Never guess, never patch symptoms. From Claude Code + Superpowers."
+description: >
+  Systematic debugging framework. 4-phase root-cause analysis with defense-in-depth. Never guess, never patch symptoms. From Claude Code + Superpowers.
 author: "Super Lobster 🦞"
 tags: ["debugging", "testing", "quality", "root-cause"]
 license: MIT

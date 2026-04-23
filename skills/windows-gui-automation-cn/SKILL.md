@@ -1,7 +1,8 @@
 ---
 name: Windows GUI 自动化集成 (中文)
 slug: windows-gui-automation-cn
-开箱即用的Windows桌面GUI自动化集成技能，整合原生UI自动化、鼠标控制、截图识别、AI视觉分析，一站式解决Windows桌面自动化需求。支持打开应用、点击、输入、截图、OCR识别、流程自动化。
+description: >
+  开箱即用的Windows桌面GUI自动化集成技能，整合原生UI自动化、鼠标控制、截图识别、AI视觉分析，一站式解决Windows桌面自动化需求。支持打开应用、点击、输入、截图、OCR识别、流程自动化。
 version: 1.0.0
 author: xiatian5
 tags: [windows, automation, gui, native, chinese, rpa, desktop]
