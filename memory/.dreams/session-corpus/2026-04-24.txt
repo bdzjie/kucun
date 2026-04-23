@@ -1,0 +1,3 @@
+[main/sessions/52120e8c-79c7-4110-b1fc-495903c93103.jsonl#L5] User: [cron:e29faff5-1e42-4d4b-a337-85b13a90a37e You are running deep reflection analysis. Execute: python m…] You are running deep reflection analysis. Execute: python modules/deep_reflection.py. Read the generated report from memory/dreaming/deep/ and summarize key findings for
+[main/sessions/6af2d88a-efe3-43e1-8f3a-643580e1974e.jsonl#L5] User: [cron:ddc8a424-ce9d-41b4-a088-3327873d3b9d You are a cost monitor. Check the current session cost usin…] You are a cost monitor. Check the current session cost using session_status tool. If cost > $50, send a message to the user warning them. Format: 'Cost Alert: $X exceeds
+[main/sessions/6af2d88a-efe3-43e1-8f3a-643580e1974e.jsonl#L8] Assistant: COST_OK

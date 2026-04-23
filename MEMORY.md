@@ -218,26 +218,26 @@ memory/skill_index.json         # Skillç´¢å¼•ï¼ˆ41ä¸ªæŠ€èƒ½ï¼‰
 
 *è¯¦ç»†å†å²è®°å½•: `memory/archived/detailed-analyses.md`*
 
-## FinceptTerminal Éî¶È·ÖÎö (2026-04-22)
+## FinceptTerminal ï¿½ï¿½È·ï¿½ï¿½ï¿½ (2026-04-22)
 
-**²Ö¿â**: Fincept-Corporation/FinceptTerminal
-**·ÖÎöÎÄ¼ş**: memory/fincept-terminal-analysis.md (7.8KB)
+**ï¿½Ö¿ï¿½**: Fincept-Corporation/FinceptTerminal
+**ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½**: memory/fincept-terminal-analysis.md (7.8KB)
 
-### ºËĞÄ¼Ü¹¹
+### ï¿½ï¿½ï¿½Ä¼Ü¹ï¿½
 
-- **ËÄ²ã¼Ü¹¹**: UI(Qt6) ¡ú Application(40+ Screens) ¡ú Infrastructure ¡ú Platform
-- **Screen/Service ·ÖÀë**: Ã¿¸ö Screen Ö»äÖÈ¾ UI£¬Service ´¦ÀíÒµÎñÂß¼­
-- **Python Ç¶Èë**: PyBind11 Á¬½Ó C++/Python£¨Á¿»¯·ÖÎö/ML£©
-- **37 AI Agents**: Trader(13) + Economic + Geopolitics Èı¸ö¿ò¼Ü
-- **100+ Data Connectors**: FRED/IMF/World Bank/AkShare/Kraken µÈ
-- **20+ Broker**: Zerodha/Alpaca/IBKR/Saxo µÈ
+- **ï¿½Ä²ï¿½Ü¹ï¿½**: UI(Qt6) ï¿½ï¿½ Application(40+ Screens) ï¿½ï¿½ Infrastructure ï¿½ï¿½ Platform
+- **Screen/Service ï¿½ï¿½ï¿½ï¿½**: Ã¿ï¿½ï¿½ Screen Ö»ï¿½ï¿½È¾ UIï¿½ï¿½Service ï¿½ï¿½ï¿½ï¿½Òµï¿½ï¿½ï¿½ß¼ï¿½
+- **Python Ç¶ï¿½ï¿½**: PyBind11 ï¿½ï¿½ï¿½ï¿½ C++/Pythonï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/MLï¿½ï¿½
+- **37 AI Agents**: Trader(13) + Economic + Geopolitics ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+- **100+ Data Connectors**: FRED/IMF/World Bank/AkShare/Kraken ï¿½ï¿½
+- **20+ Broker**: Zerodha/Alpaca/IBKR/Saxo ï¿½ï¿½
 
-### ½ñÈÕÒÑÊµÏÖÔöÇ¿
+### ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½Ç¿
 
-| Ä£¿é | ÎÄ¼ş | ¹¦ÄÜ |
+| Ä£ï¿½ï¿½ | ï¿½Ä¼ï¿½ | ï¿½ï¿½ï¿½ï¿½ |
 |------|------|------|
-| data_connectors | modules/invest/data_connectors.py | 4´óÊı¾İÔ´Í³Ò»½Ó¿Ú |
-| macro_expert | modules/invest/macro_expert.py | »õ±ÒÕş²ß·ÖÎö |
+| data_connectors | modules/invest/data_connectors.py | 4ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô´Í³Ò»ï¿½Ó¿ï¿½ |
+| macro_expert | modules/invest/macro_expert.py | ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß·ï¿½ï¿½ï¿½ |
 | quant_factors | modules/invest/quant_factors.py | VaR/Sharpe/RSI/MACD |
 
 ---
@@ -260,3 +260,10 @@ Today Completed:
 - modules/invest/data_connectors.py: FRED/IMF/WorldBank/AkShare connectors
 - modules/invest/macro_expert.py: Policy stance + yield curve analysis
 - modules/invest/quant_factors.py: VaR/Sharpe/RSI/MACD/Bollinger/ATR
+
+## Promoted From Short-Term Memory (2026-04-24)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-04-17.md:14:17 -->
+- | æ¨¡å— | è¦†ç›–ç‡ | |------|--------| | æ ¸å¿ƒæ¶æ„ | 100% | | å·¥å…·ç³»ç»Ÿ | 100% | [score=0.817 recalls=0 avg=0.620 source=memory/2026-04-17.md:14-17]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-17.md:18:21 -->
+- | æƒé™ç³»ç»Ÿ | 100% | | ä¸Šä¸‹æ–‡å‹ç¼© | 100% | | MCP ç³»ç»Ÿ | 100% | | Analytics | 100% | [score=0.817 recalls=0 avg=0.620 source=memory/2026-04-17.md:18-21]
