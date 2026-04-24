@@ -10,10 +10,11 @@ Usage (run as subprocess from agent):
   python memory_query_bridge.py "deadline communication" [episodic|lexical|unified]
 """
 
-import sys, json
+import sys, json, shutil
 from pathlib import Path
 
 WORKSPACE = Path("C:/Users/Administrator/.openclaw/workspace")
+CANVAS_DIR = Path("C:/Users/Administrator/.openclaw/canvas")
 TRIGGER_FILE = WORKSPACE / "memory_query_trigger.json"
 STATE_FILE = WORKSPACE / "memory_query_state.json"
 
@@ -68,6 +69,10 @@ def main():
 
         with open(STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
+
+        # Sync to canvas directory for UI polling
+        canvas_state = CANVAS_DIR / "memory_query_state.json"
+        shutil.copy2(STATE_FILE, canvas_state)
 
         print(f"OK: {len(results)} episodes, mode={bundle.retrieval_mode}, layer={bundle.router_result.layer.value}")
 
