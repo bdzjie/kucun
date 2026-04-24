@@ -25,6 +25,7 @@ from modules.memory.granularity_router import (
     RetrievalLayer, RouterResult, classify,
 )
 from modules.memory.graph_propagator import GraphPropagator, BundleAssembler
+from modules.memory.cone_vector import ConeVectorIndex
 
 
 @dataclass
@@ -53,6 +54,9 @@ class MemoryOrchestrator:
         self.store = ConeGraphStore(db_path=db_path)
         self.propagator = GraphPropagator(self.store)
         self.assembler = BundleAssembler(self.store)
+        # Try to load vector index from disk
+        self.vector_index = ConeVectorIndex()
+        self._vector_index_loaded = self.vector_index.load()
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -212,16 +216,31 @@ class MemoryOrchestrator:
     ) -> list[str]:
         """
         Find entry-point anchor IDs at the specified layer.
-        Uses keyword matching (vector search can be layered on later).
+        Uses vector search (TF-IDF + FAISS) when index is available,
+        falls back to keyword matching.
         """
         keywords = " ".join(classify(text).keywords)
 
+        # ── Vector search (FAISS/TF-IDF) ──────────────────────────
+        if self._vector_index_loaded:
+            type_map = {
+                RetrievalLayer.FACETPOINT: "facetpoint",
+                RetrievalLayer.FACET: "facetpoint",  # facets searched via their FPs
+                RetrievalLayer.EPISODE: "episode",
+                RetrievalLayer.ENTITY: "entity",
+                RetrievalLayer.UNKNOWN: "all",
+            }
+            search_type = type_map.get(layer, "all")
+            vec_results = self.vector_index.search(text, node_type=search_type, top_k=limit)
+            if vec_results:
+                return [nid for _, nid, _ in vec_results]
+
+        # ── Keyword search fallback ────────────────────────────────
         if layer == RetrievalLayer.FACETPOINT:
             fps = self.store.search_facetpoints(keywords, limit=limit)
             return [fp.id for fp in fps]
 
         if layer == RetrievalLayer.FACET:
-            # Search facets by topic
             facets = self.store.search_facets(keywords, limit=limit)
             return [f.id for f in facets]
 
@@ -230,7 +249,6 @@ class MemoryOrchestrator:
             return [ep.id for ep in eps]
 
         if layer == RetrievalLayer.ENTITY:
-            # Search entities by name
             entities = self.store.find_entities(name_pattern=keywords)
             return [e.id for e in entities[:limit]]
 
@@ -326,15 +344,27 @@ class MemoryOrchestrator:
             facet_ids.append(facet.id)
 
             # Create one FacetPoint per Facet (the summary content itself)
-            fp = FacetPoint(
+            fp_obj = FacetPoint(
                 content=summary,
                 facet_id=facet.id,
                 source=source_session,
                 entity_ids=entity_ids,
             )
-            self.store.add_facetpoint(fp)
+            fp = self.store.add_facetpoint(fp_obj)
 
-            # Create belongs_to edge
+            # Create part_of edge: FacetPoint → Facet
+            edge_fp = EvidenceEdge(
+                source_id=fp.id,
+                target_id=facet.id,
+                source_type="facetpoint",
+                target_type="facet",
+                edge_type="part_of",
+                edge_text=f"FacetPoint belongs to Facet '{topic}'",
+                propagation_cost=0.3,
+            )
+            self.store.add_edge(edge_fp)
+
+            # Create belongs_to edge: Facet → Episode
             edge = EvidenceEdge(
                 source_id=facet.id,
                 target_id=ep.id,

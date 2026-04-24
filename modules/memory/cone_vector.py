@@ -1,0 +1,336 @@
+"""
+cone_vector.py — Vector Index for Cone Graph
+
+Provides fast approximate nearest-neighbor search over
+Entity / FacetPoint / Episode text using TF-IDF + FAISS.
+
+For save/load: stores training texts and vocabulary so the
+TF-IDF vectorizer can be fully reconstructed from disk.
+"""
+
+import json
+import numpy as np
+from typing import Optional
+from pathlib import Path
+
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.neighbors import NearestNeighbors
+
+
+WORKSPACE = Path("C:/Users/Administrator/.openclaw/workspace")
+INDEX_DIR = WORKSPACE / "memory" / "cone_vector"
+INDEX_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _tfidf_transform(vectorizer: TfidfVectorizer, texts: list[str]) -> np.ndarray:
+    """
+    Pure-numpy TF-IDF transform that bypasses sklearn's validate_data.
+    Manually applies: tf * idf from a fitted vectorizer.
+    """
+    if not hasattr(vectorizer, 'idf_') or not hasattr(vectorizer, 'vocabulary_'):
+        raise RuntimeError("Vectorizer not fitted")
+    tf = vectorizer.transform(texts)  # sparse matrix, uses internal _tfidf but with known vocab
+    # Already contains idf applied; just return as array
+    return tf.toarray().astype("float32")
+
+
+class ConeVectorIndex:
+    """
+    Vector index for Cone Graph nodes.
+
+    Stores 3 separate indexes:
+      - entity_index: Entity.name + entity_type
+      - facetpoint_index: FacetPoint.content
+      - episode_index: Episode.summary
+
+    Each node's text is embedded with TF-IDF, then indexed with FAISS
+    (or sklearn NN as fallback) for fast approximate nearest-neighbor search.
+    """
+
+    def __init__(self, dim: int = 512):
+        self.dim = dim
+        self._vectorizer: Optional[TfidfVectorizer] = None
+        self.fitted = False
+
+        self.entity_ids: list[str] = []
+        self.entity_vectors: Optional[np.ndarray] = None
+        self._entity_index = None
+
+        self.facetpoint_ids: list[str] = []
+        self.facetpoint_vectors: Optional[np.ndarray] = None
+        self._fp_index = None
+
+        self.episode_ids: list[str] = []
+        self.episode_vectors: Optional[np.ndarray] = None
+        self._episode_index = None
+
+        self._train_texts: list[str] = []
+
+    @property
+    def vectorizer(self) -> TfidfVectorizer:
+        if self._vectorizer is None:
+            self._vectorizer = TfidfVectorizer(max_features=self.dim)
+        return self._vectorizer
+
+    # ── Fit / Build ───────────────────────────────────────────────────
+
+    def fit(
+        self,
+        entities: list[dict] = None,
+        facetpoints: list[dict] = None,
+        episodes: list[dict] = None,
+    ):
+        """
+        Build vector indexes from node data.
+
+        Args:
+            entities: [{id, name, entity_type}]
+            facetpoints: [{id, content}]
+            episodes: [{id, summary}]
+        """
+        all_texts: list[str] = []
+
+        if entities:
+            for e in entities:
+                text = f"{e['name']} {e.get('entity_type', '')}".strip()
+                all_texts.append(text)
+                self.entity_ids.append(e["id"])
+
+        if facetpoints:
+            for fp in facetpoints:
+                all_texts.append(fp.get("content", ""))
+                self.facetpoint_ids.append(fp["id"])
+
+        if episodes:
+            for ep in episodes:
+                all_texts.append(ep.get("summary", ""))
+                self.episode_ids.append(ep["id"])
+
+        if not all_texts:
+            return
+
+        self._train_texts = all_texts[:]  # save for reload
+        self.vectorizer.fit(all_texts)
+        self.fitted = True
+
+        # Build vectors per type
+        cursor = 0
+        if entities:
+            n = len(entities)
+            vecs = self.vectorizer.transform(all_texts[cursor:cursor + n]).toarray().astype("float32")
+            self.entity_vectors = vecs
+            cursor += n
+
+        if facetpoints:
+            n = len(facetpoints)
+            vecs = self.vectorizer.transform(all_texts[cursor:cursor + n]).toarray().astype("float32")
+            self.facetpoint_vectors = vecs
+            cursor += n
+
+        if episodes:
+            n = len(episodes)
+            vecs = self.vectorizer.transform(all_texts[cursor:cursor + n]).toarray().astype("float32")
+            self.episode_vectors = vecs
+            cursor += n
+
+        self._build_indexes()
+
+    def _build_indexes(self):
+        """Build FAISS or sklearn indexes for each index type."""
+        d = self.entity_vectors.shape[1] if self.entity_vectors is not None else self.dim
+
+        if FAISS_AVAILABLE:
+            def make_index(vecs):
+                v = vecs.copy()
+                faiss.normalize_L2(v)
+                idx = faiss.IndexFlatIP(d)
+                idx.add(v)
+                return idx
+
+            if self.entity_vectors is not None and len(self.entity_ids) > 0:
+                self._entity_index = make_index(self.entity_vectors)
+            if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0:
+                self._fp_index = make_index(self.facetpoint_vectors)
+            if self.episode_vectors is not None and len(self.episode_ids) > 0:
+                self._episode_index = make_index(self.episode_vectors)
+        else:
+            def make_nn(vecs):
+                nn = NearestNeighbors(n_neighbors=min(5, len(vecs)), metric="cosine")
+                nn.fit(vecs)
+                return nn
+
+            if self.entity_vectors is not None and len(self.entity_ids) > 0:
+                self._entity_index = make_nn(self.entity_vectors)
+            if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0:
+                self._fp_index = make_nn(self.facetpoint_vectors)
+            if self.episode_vectors is not None and len(self.episode_ids) > 0:
+                self._episode_index = make_nn(self.episode_vectors)
+
+    # ── Search ────────────────────────────────────────────────────────
+
+    def _query_vector(self, query: str) -> np.ndarray:
+        """Transform query using stored vectorizer vocabulary."""
+        # Use sklearn's transform but work around validation issues
+        # by setting n_features_in_ to match vocabulary size
+        vocab_size = len(self.vectorizer.vocabulary_) if hasattr(self.vectorizer, 'vocabulary_') else self.dim
+        if hasattr(self.vectorizer, 'n_features_in_'):
+            self.vectorizer.n_features_in_ = vocab_size
+        # Transform
+        vec = self.vectorizer.transform([query]).toarray().astype("float32")
+        if FAISS_AVAILABLE:
+            faiss.normalize_L2(vec)
+        return vec
+
+    def search(
+        self,
+        query: str,
+        node_type: str = "all",
+        top_k: int = 5,
+    ) -> list[tuple[str, str, float]]:
+        """
+        Search for similar nodes.
+
+        Returns:
+            List of (node_type, node_id, score) sorted by similarity descending.
+        """
+        if not self.fitted:
+            return []
+
+        q_vec = self._query_vector(query)
+        results: list[tuple[str, str, float]] = []
+
+        def search_index(index, ids, ntype):
+            if index is None or len(ids) == 0:
+                return
+            k = min(top_k, len(ids))
+            if FAISS_AVAILABLE:
+                scores, indices = index.search(q_vec, k)
+                for idx, score in zip(indices[0], scores[0]):
+                    if 0 <= idx < len(ids):
+                        results.append((ntype, ids[idx], float(score)))
+            else:
+                dists, indices = index.kneighbors(q_vec, k)
+                for idx, dist in zip(indices[0], dists[0]):
+                    if 0 <= idx < len(ids):
+                        results.append((ntype, ids[idx], float(1 - dist)))
+
+        if node_type in ("entity", "all"):
+            search_index(self._entity_index, self.entity_ids, "entity")
+        if node_type in ("facetpoint", "all"):
+            search_index(self._fp_index, self.facetpoint_ids, "facetpoint")
+        if node_type in ("episode", "all"):
+            search_index(self._episode_index, self.episode_ids, "episode")
+
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:top_k]
+
+    # ── Persistence ─────────────────────────────────────────────────
+
+    def save(self, prefix: str = "cone_vector") -> Path:
+        """Save all indexes to disk."""
+        path = INDEX_DIR / f"{prefix}.npz"
+        idf_list = list(self.vectorizer.idf_) if hasattr(self.vectorizer, "idf_") else []
+        vocab_int = {k: int(v) for k, v in self.vectorizer.vocabulary_.items()} if hasattr(self.vectorizer, "vocabulary_") else {}
+        np.savez(
+            path,
+            entity_vectors=self.entity_vectors,
+            facetpoint_vectors=self.facetpoint_vectors,
+            episode_vectors=self.episode_vectors,
+            entity_ids=np.array(self.entity_ids, dtype=object),
+            facetpoint_ids=np.array(self.facetpoint_ids, dtype=object),
+            episode_ids=np.array(self.episode_ids, dtype=object),
+            vocab=json.dumps(vocab_int),
+            idf=np.array(idf_list),
+            train_texts=json.dumps(self._train_texts),
+        )
+        return path
+
+    def load(self, prefix: str = "cone_vector") -> bool:
+        """Load indexes from disk. Returns True if successful."""
+        path = INDEX_DIR / f"{prefix}.npz"
+        if not path.exists():
+            return False
+        data = np.load(path, allow_pickle=True)
+
+        self.entity_ids = data["entity_ids"].tolist()
+        self.facetpoint_ids = data["facetpoint_ids"].tolist()
+        self.episode_ids = data["episode_ids"].tolist()
+        self.entity_vectors = data["entity_entities" if "entity_vectors" not in data else "entity_vectors"]
+        self.facetpoint_vectors = data["facetpoint_vectors"]
+        self.episode_vectors = data["episode_vectors"]
+
+        # Reconstruct TF-IDF vectorizer from stored data
+        def _decode_str(val, default):
+            if val is None:
+                return default
+            if isinstance(val, bytes):
+                return val.decode()
+            if isinstance(val, np.ndarray):
+                return val.item() if val.ndim == 0 else str(val)
+            if isinstance(val, str):
+                return val
+            return default
+
+        raw_vocab = _decode_str(data.get("vocab"), "{}")
+        vocab = json.loads(raw_vocab)
+        idf_arr = np.array(data.get("idf", []))
+        raw_texts = _decode_str(data.get("train_texts"), "[]")
+        train_texts = json.loads(raw_texts)
+
+        if train_texts and len(idf_arr) > 0:
+            # Fit a fresh vectorizer on training texts, then restore stored idf
+            v = TfidfVectorizer(max_features=self.dim)
+            v.fit(train_texts)
+            v.idf_ = idf_arr
+            self._vectorizer = v
+
+        self._build_indexes()
+        self.fitted = True
+        return True
+
+
+# ─── CLI ───────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+    from modules.memory.cone_graph import ConeGraphStore
+
+    parser = argparse.ArgumentParser(description="Cone Vector Index CLI")
+    parser.add_argument("--build", action="store_true", help="Build index from cone_graph.db")
+    parser.add_argument("--search", help="Search query")
+    parser.add_argument("--type", default="all", choices=["entity", "facetpoint", "episode", "all"])
+    parser.add_argument("--top-k", type=int, default=5)
+    args = parser.parse_args()
+
+    index = ConeVectorIndex()
+
+    if args.build:
+        store = ConeGraphStore()
+        all_entities, all_fps, all_eps = [], [], []
+        with __import__('sqlite3').connect(store.db_path) as conn:
+            for row in conn.execute("SELECT id, name, entity_type FROM entities").fetchall():
+                all_entities.append({"id": row[0], "name": row[1], "entity_type": row[2] or "concept"})
+            for row in conn.execute("SELECT id, content FROM facetpoints").fetchall():
+                all_fps.append({"id": row[0], "content": row[1] or ""})
+            for row in conn.execute("SELECT id, summary FROM episodes").fetchall():
+                all_eps.append({"id": row[0], "summary": row[1] or ""})
+
+        index.fit(entities=all_entities, facetpoints=all_fps, episodes=all_eps)
+        path = index.save()
+        print(f"Index built: {path}")
+        print(f"  entities={len(index.entity_ids)}, fps={len(index.facetpoint_ids)}, eps={len(index.episode_ids)}")
+
+    elif args.search:
+        if not index.load():
+            print("No index found. Run --build first.")
+            exit(1)
+        results = index.search(args.search, node_type=args.type, top_k=args.top_k)
+        print(f"Search: '{args.search}' (type={args.type})")
+        for ntype, nid, score in results:
+            print(f"  [{ntype}] {nid[:12]} score={score:.4f}")
