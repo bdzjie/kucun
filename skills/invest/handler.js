@@ -34,6 +34,25 @@ const WORKSPACE = 'C:/Users/Administrator/.openclaw/workspace';
 const PY = 'python'; // 'python' or 'python3'
 
 /**
+ * Call stock_data.py — real-time quotes, K-line, news via Sina API
+ * Replaces Node.js fetch (which is blocked in sandbox for external HTTP)
+ */
+function callStockData(command, tickers, extraArgs = []) {
+  const scriptPath = `${WORKSPACE}/skills/invest/stock_data.py`;
+  const cmd = `${PY} "${scriptPath}" ${command} ${tickers.join(' ')}`;
+  try {
+    const output = execSync(cmd, {
+      encoding: 'utf-8',
+      timeout: 20000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return output.trim();
+  } catch (e) {
+    return `ERROR:${e.message}`;
+  }
+}
+
+/**
  * Call macro_expert.py — returns macroeconomic context + policy stance
  */
 async function fetchMacroContext() {
@@ -284,38 +303,18 @@ function computeSentimentScore(newsItems) {
 }
 
 /**
- * Fetch recent news from Eastmoney
+ * Fetch recent news from Eastmoney — via Python (Node.js fetch blocked in sandbox)
  */
 async function fetchNews(ticker) {
   try {
-    // Determine secid for Eastmoney news API
-    let secid = '';
-    if (/^\d{6}$/.test(ticker)) {
-      secid = ticker.startsWith('6') ? `1.${ticker}` : `0.${ticker}`;
-    } else if (ticker.startsWith('hk')) {
-      const code = ticker.replace('hk', '');
-      secid = `116.${code}`;
-    } else if (ticker.startsWith('us')) {
-      const code = ticker.replace('us', '');
-      secid = `105.${code}`;
-    } else {
-      // Try as US stock
-      secid = `105.${ticker}`;
+    const raw = callStockData('news', [ticker]);
+    const lines = raw.split('\n').filter(l => l.trim() && !l.startsWith('==='));
+    const news = [];
+    for (const line of lines) {
+      const m = line.match(/\[([^\]]+)\]\s+(.+)/);
+      if (m) news.push({ title: m[2].trim(), time: m[1], content: '' });
     }
-
-    // Eastmoney news API - recent company news
-    const url = `https://np-anotice-stock.eastmoney.com/api/security/ann?cb=&sr=-1&page_size=10&page_index=1&ann_type=S,C&f_node=0&s_node=0&secid=${secid}`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com' } });
-    const json = await res.json();
-
-    if (!json.data || !json.data.list) return [];
-
-    return json.data.list.slice(0, 10).map(item => ({
-      title: item.title || '',
-      content: item.notice_content || '',
-      time: item.notice_date || '',
-      type: item.art_type || '',
-    }));
+    return news.slice(0, 10);
   } catch (e) {
     return [];
   }
@@ -460,45 +459,30 @@ function normalizeTicker(ticker) {
 }
 
 /**
- * Fetch stock quote from Eastmoney
+ * Fetch stock quote — now via Python/Sina API (Node.js fetch blocked in sandbox)
  */
-async function fetchQuote(ticker) {
-  const { market, code, displayCode } = normalizeTicker(ticker);
-
-  // secid format: cn=1/0, hk=116, us=105
-  const marketMap = { cn: null, hk: '116.', us: '105.' };
-  const prefix = market === 'cn'
-    ? (code.startsWith('6') ? '1.' : '0.')
-    : (marketMap[market] || '105.');
-
-  const secid = `${prefix}${code}`;
-  const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f44,f45,f46,f47,f48,f57,f58,f60,f116,f117,f162,f163,f168,f169,f170,f171,f50,f57&ut=fa5fd1943c7b386f172d6893dbfba10b`;
-
+function fetchQuote(ticker) {
+  const raw = callStockData('quote', [ticker]);
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const json = await res.json();
-    if (!json.data) return null;
-
-    const d = json.data;
+    // First line is JSON quote data
+    const firstLine = raw.split('---')[0].trim();
+    const data = JSON.parse(firstLine);
+    if (!data.success) return null;
     return {
       ticker,
-      displayCode,
-      price: d.f43 / 100 || d.f58,
-      change: d.f169 / 100,
-      changePercent: (d.f170 || d.f169) / 100,
-      open: d.f46 / 100,
-      high: d.f44 / 100,
-      low: d.f45 / 100,
-      volume: d.f47,
-      amount: d.f48,
-      marketCap: d.f116,
-      pe: d.f162 / 100 || 'N/A',
-      pb: d.f168 / 100 || 'N/A',
-      dividendYield: d.f173 / 100 || 'N/A',
-      week52High: d.h39 / 100 || 'N/A',
-      week52Low: d.h40 / 100 || 'N/A',
-      highLimit: d.f171 / 100,
-      lowLimit: d.f50 / 100,
+      displayCode: data.ticker,
+      name: data.name,
+      price: data.price,
+      change: data.change,
+      changePercent: data.change_pct,
+      open: data.open,
+      high: data.high,
+      low: data.low,
+      volume: data.volume,
+      amount: data.amount,
+      marketCap: data.total_market_cap,
+      highLimit: null,
+      lowLimit: null,
     };
   } catch (e) {
     return null;
