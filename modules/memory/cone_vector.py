@@ -143,13 +143,12 @@ class ConeVectorIndex:
 
     def _build_indexes(self):
         """Build FAISS or sklearn indexes for each index type."""
-        d = self.entity_vectors.shape[1] if self.entity_vectors is not None else self.dim
-
         if FAISS_AVAILABLE:
             def make_index(vecs):
+                d_local = vecs.shape[1]
                 v = vecs.copy()
                 faiss.normalize_L2(v)
-                idx = faiss.IndexFlatIP(d)
+                idx = faiss.IndexFlatIP(d_local)
                 idx.add(v)
                 return idx
 
@@ -171,6 +170,7 @@ class ConeVectorIndex:
                 self._fp_index = make_nn(self.facetpoint_vectors)
             if self.episode_vectors is not None and len(self.episode_ids) > 0:
                 self._episode_index = make_nn(self.episode_vectors)
+
 
     # ── Search ────────────────────────────────────────────────────────
 

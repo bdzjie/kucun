@@ -63,11 +63,13 @@ EXPERTS: dict[str, dict] = {
     },
     # --- 记忆专家 ---
     "memory_expert": {
-        "skills": ["memory-assistant", "fluid-memory", "ontology", "verify-memory"],
+        "skills": ["memory-assistant", "fluid-memory", "ontology", "verify-memory", "cone-memory"],
         "keywords": [
             r"记得", r"记忆", r"之前", r"过去", r"记录",
             r"remember", r"memory", r"recall", r"past",
             r"沉淀", r"总结", r"学到",
+            r"do you remember", r"what do you remember", r"query memory",
+            r"search memory", r"cone graph", r"m.flow",
         ],
         "preferred_depth": "normal",
         "weight": 1.0,

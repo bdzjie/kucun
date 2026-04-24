@@ -1,12 +1,12 @@
 {
   "lastChecks": {
-    "email": "2026-04-23T12:07:00Z",
+    "email": "2026-04-24T09:55:00Z",
     "calendar": "2026-04-23T12:07:00Z",
     "weather": "2026-04-24T08:34:00Z",
     "memory_maintenance": "2026-04-24T04:34:00Z",
-    "git_status": "2026-04-24T04:43:00Z",
+    "git_status": "2026-04-24T09:55:00Z",
     "skills_health": "2026-04-24T05:34:00Z",
-    "proactive_memory": "2026-04-24T08:34:00Z"
+    "proactive_memory": "2026-04-24T11:04:00Z"
   },
   "checkIntervalHours": {
     "email": 4,
@@ -20,9 +20,11 @@
   "notes": {
     "calendar": "no calendar client configured",
     "email": "no email client configured",
-    "git_status": "GitHub unstable, commits queued (20013c3 + a4bbb55 + 75e75d0)",
+    "git_status": "Working tree clean. Untracked: cone_graph.db (SQLite), cone_vector/ (FAISS index), memory_query_state.json (runtime). All fine.",
     "invest": "stock_data.py real-time data - quote/quant/news all working",
-    "mflow": "M-flow Cone Graph Phase 1 done: cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator",
-    "skills_health": "avg=90.8 (2026-04-24T05:34)"
+    "mflow": "M-flow Phase 1+2+3 done (2026-04-24T09:23): cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator + cone_vector + canvas UI",
+    "skills_health": "avg=90.8 (2026-04-24T05:34)",
+    "canvas": "routing-dashboard.html updated with Memory Query panel. canvas/ and canvas-host/ are separate dirs (canvas=actual served, canvas-host=git tracked)",
+    "proactive_memory": "proactive_memory.mjs depends on memory_rag.mjs/memory_feedback.mjs (not yet built). No actionable suggestions."
   }
 }
