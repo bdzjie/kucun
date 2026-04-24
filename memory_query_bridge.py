@@ -1,0 +1,84 @@
+"""
+memory_query_bridge.py — Bridge between canvas UI and MemoryOrchestrator
+
+Reads memory_query_trigger.json (written by agent on user query)
+  → calls MemoryOrchestrator.query()
+  → writes results to memory_query_state.json
+  → canvas polls and displays
+
+Usage (run as subprocess from agent):
+  python memory_query_bridge.py "deadline communication" [episodic|lexical|unified]
+"""
+
+import sys, json
+from pathlib import Path
+
+WORKSPACE = Path("C:/Users/Administrator/.openclaw/workspace")
+TRIGGER_FILE = WORKSPACE / "memory_query_trigger.json"
+STATE_FILE = WORKSPACE / "memory_query_state.json"
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python memory_query_bridge.py <query> [mode]")
+        sys.exit(1)
+
+    query_text = sys.argv[1]
+    mode = sys.argv[2] if len(sys.argv) > 2 else "episodic"
+
+    # Add workspace to path
+    sys.path.insert(0, str(WORKSPACE))
+
+    try:
+        from modules.memory.memory_orchestrator import MemoryOrchestrator
+
+        orch = MemoryOrchestrator()
+        bundle = orch.query(query_text, mode=mode, top_k=5)
+
+        # Serialize results for canvas
+        results = []
+        for ep in bundle.episodes:
+            facets = []
+            for fac in bundle.facets:
+                if fac.id in ep.facet_ids:
+                    facets.append({"id": fac.id, "topic": fac.topic, "summary": fac.summary})
+
+            results.append({
+                "id": ep.id,
+                "summary": ep.summary,
+                "score": bundle.scores.get(ep.id, 0.0),
+                "source_session": ep.source_session,
+                "source_type": ep.source_type,
+                "timestamp": ep.timestamp,
+                "facets": facets,
+            })
+
+        state = {
+            "query": query_text,
+            "mode": mode,
+            "retrieval_mode": bundle.retrieval_mode,
+            "router_result": {
+                "layer": bundle.router_result.layer.value,
+                "confidence": bundle.router_result.confidence,
+                "keywords": bundle.router_result.keywords,
+            },
+            "results": results,
+            "total_episodes": len(results),
+        }
+
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+
+        print(f"OK: {len(results)} episodes, mode={bundle.retrieval_mode}, layer={bundle.router_result.layer.value}")
+
+    except Exception as e:
+        error_state = {"error": str(e), "query": query_text}
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(error_state, f)
+        print(f"ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

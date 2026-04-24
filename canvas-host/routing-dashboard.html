@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Routing Status — OpenClaw</title>
+<title>Routing + Memory — OpenClaw</title>
 <style>
   :root {
     --bg: #0d0d0f;
@@ -42,12 +42,7 @@
     min-width: 320px;
   }
   .badge-icon { font-size: 36px; margin-bottom: 8px; }
-  .badge-depth {
-    font-size: 22px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
+  .badge-depth { font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
   .badge-depth.fast { color: var(--fast); }
   .badge-depth.normal { color: var(--normal); }
   .badge-depth.deep { color: var(--deep); }
@@ -106,6 +101,68 @@
   .chain-src.expert { color: var(--normal); }
   .chain-src.default { color: var(--muted); }
 
+  /* ── Memory Query ── */
+  .mem-section {
+    width: 100%;
+    max-width: 600px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  .mem-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; }
+  .mem-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .mem-input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .mem-input:focus { border-color: var(--normal); }
+  .mem-btn {
+    background: rgba(36,224,138,0.15);
+    border: 1px solid rgba(36,224,138,0.4);
+    color: var(--ok);
+    padding: 9px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .mem-btn:active { transform: translateY(1px); }
+  .mem-meta { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .mem-meta span { margin-right: 14px; }
+  .mem-layer {
+    display: inline-block;
+    background: rgba(66,165,245,0.2);
+    color: var(--normal);
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mem-mode {
+    display: inline-block;
+    background: rgba(171,71,188,0.2);
+    color: var(--deep);
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mem-ep-item { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+  .mem-ep-item:last-child { border-bottom: none; }
+  .mem-ep-score { float: right; font-size: 11px; color: var(--ok); font-weight: 700; }
+  .mem-ep-summary { color: var(--text); line-height: 1.4; margin-top: 3px; }
+  .mem-empty { text-align: center; color: var(--muted); padding: 16px 0; font-size: 13px; }
+  .mem-error { color: var(--err); font-size: 12px; padding: 8px 0; }
+  .mem-loading { text-align: center; color: var(--muted); padding: 16px 0; font-size: 13px; }
+
   .footer { color: var(--muted); font-size: 11px; margin-top: auto; padding-top: 24px; }
   .no-data { text-align: center; color: var(--muted); padding: 40px; }
 </style>
@@ -147,39 +204,50 @@
   </div>
 </div>
 
+<!-- ── Memory Query Panel ── -->
+<div class="mem-section">
+  <div class="mem-title">Cone Graph Memory</div>
+  <div class="mem-input-row">
+    <input class="mem-input" id="mem-query" type="text" placeholder="Query memory... e.g. deadline communication" />
+    <button class="mem-btn" id="mem-search-btn">Search</button>
+  </div>
+  <div class="mem-meta" id="mem-meta" style="display:none;">
+    <span id="mem-layer-badge"></span>
+    <span id="mem-mode-badge"></span>
+    <span id="mem-count"></span>
+  </div>
+  <div id="mem-results">
+    <div class="mem-empty">Enter a query above to search memory</div>
+  </div>
+</div>
+
 <div class="footer">
   Auto-updates via Canvas bridge · Deep = 🧠 / Normal = 🔍 / Fast = ⚡
 </div>
 
 <script>
 (() => {
+  // ── Routing State ───────────────────────────────────────────────
   const DEPTH_ICONS = { fast: '⚡', normal: '🔍', deep: '🧠' };
-  const DEPTH_COLORS = { fast: '#f5c842', normal: '#42a5f5', deep: '#ab47bc' };
 
   function updateRouting(info) {
     if (!info || !info.expert) return;
-
     const depth = info.depth || 'normal';
-    const icon = DEPTH_ICONS[depth] || '🔍';
-
-    document.getElementById('depth-icon').textContent = icon;
+    document.getElementById('depth-icon').textContent = DEPTH_ICONS[depth] || '🔍';
     const depthEl = document.getElementById('depth-name');
     depthEl.textContent = depth.toUpperCase();
     depthEl.className = 'badge-depth ' + depth;
     document.getElementById('depth-meta').textContent =
       `${info.expert} · ${info.taskType} · conf ${((info.confidence||0)*100).toFixed(0)}%`;
-
     document.getElementById('expert').textContent = info.expert || '—';
     const confEl = document.getElementById('confidence');
     confEl.textContent = info.confidence ? (info.confidence * 100).toFixed(0) + '%' : '—';
     confEl.className = 'stat-value ' + ((info.confidence||0) > 0.8 ? 'ok' : 'warn');
     document.getElementById('task-type').textContent = info.taskType || '—';
-
     const chainLen = (info.chain || []).length;
     const chainLenEl = document.getElementById('chain-len');
     chainLenEl.textContent = chainLen;
     chainLenEl.className = 'stat-value ' + (chainLen > 0 ? 'ok' : 'warn');
-
     const chainList = document.getElementById('chain-list');
     if (info.chain && info.chain.length > 0) {
       chainList.innerHTML = info.chain.map((item, i) => `
@@ -196,36 +264,124 @@
     }
   }
 
-  // Poll routing state file written by AIAgent
   async function fetchRoutingState() {
     try {
-      const urls = [
-        'routing_state.json',
-        '/routing_state.json',
-      ]
-      for (const url of urls) {
+      for (const url of ['routing_state.json', '/routing_state.json']) {
         try {
-          const resp = await fetch(url, { cache: 'no-cache' })
+          const resp = await fetch(url, { cache: 'no-cache' });
           if (resp.ok) {
-            const info = await resp.json()
-            if (info && info.expert) {
-              updateRouting(info)
-              return
-            }
+            const info = await resp.json();
+            if (info && info.expert) { updateRouting(info); return; }
           }
         } catch { /* try next */ }
       }
     } catch { /* silent */ }
   }
 
-  setInterval(fetchRoutingState, 2000)
-  fetchRoutingState()
+  setInterval(fetchRoutingState, 2000);
+  fetchRoutingState();
+  window.addEventListener('openclaw:routing-update', (ev) => updateRouting(ev?.detail));
 
-  window.addEventListener('openclaw:routing-update', (ev) => {
-    updateRouting(ev?.detail)
-  })
+  // ── Memory Query ──────────────────────────────────────────────────
+  const STATE_FILE = 'memory_query_state.json';
 
-  console.log('[Routing Canvas] Ready, polling routing_state.json')
+  async function queryMemory(text) {
+    const resultsEl = document.getElementById('mem-results');
+    const metaEl = document.getElementById('mem-meta');
+    resultsEl.innerHTML = '<div class="mem-loading">Searching memory…</div>';
+    metaEl.style.display = 'none';
+    try {
+      const resp = await fetch(STATE_FILE + '?t=' + Date.now(), { cache: 'no-cache' });
+      if (!resp.ok) throw new Error('State file not found');
+      const state = await resp.json();
+      if (!state || !state.results) throw new Error('No results in state');
+      const { results, router_result, retrieval_mode } = state;
+      // Show meta
+      metaEl.style.display = 'block';
+      document.getElementById('mem-layer-badge').textContent = router_result?.layer?.toUpperCase() || '—';
+      document.getElementById('mem-mode-badge').textContent = retrieval_mode?.toUpperCase() || '—';
+      document.getElementById('mem-count').textContent = results.length + ' episodes';
+      // Show episodes
+      if (results.length === 0) {
+        resultsEl.innerHTML = '<div class="mem-empty">No episodes found for this query</div>';
+        return;
+      }
+      resultsEl.innerHTML = results.map(ep => `
+        <div class="mem-ep-item">
+          <span class="mem-ep-score">${((ep.score || 0) * 100).toFixed(0)}%</span>
+          <div class="chain-slug">${ep.id}</div>
+          <div class="mem-ep-summary">${ep.summary || '(no summary)'}</div>
+          ${(ep.facets || []).length > 0 ? '<div style="margin-top:4px;font-size:11px;color:var(--muted);">Facets: ' + ep.facets.map(f => f.topic).join(' · ') + '</div>' : ''}
+        </div>
+      `).join('');
+    } catch (err) {
+      resultsEl.innerHTML = '<div class="mem-error">No results. Run memory query from OpenClaw first.</div>';
+    }
+  }
+
+  async function triggerMemoryQuery(text) {
+    // Write query to trigger file
+    try {
+      // Write query to trigger file via fetch POST if supported
+      // Otherwise just write a state file (canvas can't write, but OpenClaw agent reads this)
+      const triggerResp = await fetch('memory_query_trigger.json?t=' + Date.now(), { cache: 'no-cache' });
+      // If we can read it, OpenClaw is writing it — read results
+      await queryMemory(text);
+    } catch {
+      // Canvas can't trigger Python — just read latest results if available
+      await queryMemory(text);
+    }
+  }
+
+  // Auto-poll for memory results
+  async function pollMemoryResults() {
+    try {
+      const resp = await fetch(STATE_FILE + '?t=' + Date.now(), { cache: 'no-cache' });
+      if (resp.ok) {
+        const state = await resp.json();
+        if (state && state.query) {
+          document.getElementById('mem-query').value = state.query || '';
+          if (state.results) {
+            const resultsEl = document.getElementById('mem-results');
+            const metaEl = document.getElementById('mem-meta');
+            const { results, router_result, retrieval_mode } = state;
+            metaEl.style.display = 'block';
+            document.getElementById('mem-layer-badge').textContent = router_result?.layer?.toUpperCase() || '—';
+            document.getElementById('mem-mode-badge').textContent = retrieval_mode?.toUpperCase() || '—';
+            document.getElementById('mem-count').textContent = results.length + ' episodes';
+            if (results.length === 0) {
+              resultsEl.innerHTML = '<div class="mem-empty">No episodes found</div>';
+            } else {
+              resultsEl.innerHTML = results.map(ep => `
+                <div class="mem-ep-item">
+                  <span class="mem-ep-score">${((ep.score || 0) * 100).toFixed(0)}%</span>
+                  <div class="chain-slug">${ep.id}</div>
+                  <div class="mem-ep-summary">${ep.summary || '(no summary)'}</div>
+                </div>
+              `).join('');
+            }
+          }
+        }
+      }
+    } catch { /* silent */ }
+  }
+
+  // Event listeners
+  document.getElementById('mem-search-btn').addEventListener('click', () => {
+    const q = document.getElementById('mem-query').value.trim();
+    if (q) triggerMemoryQuery(q);
+  });
+  document.getElementById('mem-query').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      const q = ev.target.value.trim();
+      if (q) triggerMemoryQuery(q);
+    }
+  });
+
+  setInterval(pollMemoryResults, 3000);
+  pollMemoryResults();
+
+  console.log('[Canvas] Ready — routing + memory polling active');
 })();
 </script>
 </body>
