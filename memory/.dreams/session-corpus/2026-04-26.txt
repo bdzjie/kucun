@@ -1,0 +1,4 @@
+[main/sessions/b6f387bd-c538-4049-9492-18c2ce73ee49.jsonl#L5] User: [cron:ddc8a424-ce9d-41b4-a088-3327873d3b9d You are a cost monitor. Check the current session cost usin…] You are a cost monitor. Check the current session cost using session_status tool. If cost > $50, send a message to the user warning them. Format: 'Cost Alert: $X exceeds
+[main/sessions/f4cccacc-c784-4957-8cea-7ff325b43c55.jsonl#L5] User: [cron:e29faff5-1e42-4d4b-a337-85b13a90a37e You are running deep reflection analysis. Execute: python m…] You are running deep reflection analysis. Execute: python modules/deep_reflection.py. Read the generated report from memory/dreaming/deep/ and summarize key findings for
+[main/sessions/f4cccacc-c784-4957-8cea-7ff325b43c55.jsonl#L5] User: delivered automatically.
+[main/sessions/f4cccacc-c784-4957-8cea-7ff325b43c55.jsonl#L8] Assistant: No recent routing feedback — skipping analysis.

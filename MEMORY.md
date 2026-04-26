@@ -267,3 +267,37 @@ Today Completed:
 - | 模块 | 覆盖率 | |------|--------| | 核心架构 | 100% | | 工具系统 | 100% | [score=0.817 recalls=0 avg=0.620 source=memory/2026-04-17.md:14-17]
 <!-- openclaw-memory-promotion:memory:memory/2026-04-17.md:18:21 -->
 - | 权限系统 | 100% | | 上下文压缩 | 100% | | MCP 系统 | 100% | | Analytics | 100% | [score=0.817 recalls=0 avg=0.620 source=memory/2026-04-17.md:18-21]
+
+## Promoted From Short-Term Memory (2026-04-25)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:20:23 -->
+- ┌─────────────────────────────┼─────────────────────────────┐ ↓ ↓ ↓ Processors Processors Processors (PDF解码/分块/ (LLM推理/Embedding) (图存储/向量存储) [score=0.862 recalls=0 avg=0.620 source=memory/2026-04-19.md:20-23]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:24:25 -->
+- 关系抽取/...) ↓ Cassandra + Qdrant [score=0.862 recalls=0 avg=0.620 source=memory/2026-04-19.md:24-25]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:28:31 -->
+- **核心技术栈**: | 组件 | 技术 | |------|------| | 消息主干 | Apache Pulsar (异步、持久化、重放) | [score=0.862 recalls=0 avg=0.620 source=memory/2026-04-19.md:28-31]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-20.md:7:7 -->
+- 基于 T0 文档，将 AGENTS.md 从松散结构重构为四层： [score=0.822 recalls=0 avg=0.620 source=memory/2026-04-20.md:7-7]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-20.md:9:12 -->
+- | 层级 | 内容 | |------|------| | **C** Context + Character | 身份/用户/背景/身份层定义 | | **A** Ability + Action | 工具集/Skill 系统/行动原则 | [score=0.822 recalls=0 avg=0.620 source=memory/2026-04-20.md:9-12]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-20.md:13:14 -->
+- | **P** Policy + Protection | 红线/安全机制/群组行为 | | **O** Output + Optimization | 输出规范/持续优化机制 | [score=0.822 recalls=0 avg=0.620 source=memory/2026-04-20.md:13-14]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-17.md:22:25 -->
+- | CLI Transport | 100% | | Remote Session | 100% | | Keybindings | 100% | | LSP | 100% | [score=0.812 recalls=0 avg=0.620 source=memory/2026-04-17.md:22-25]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-17.md:26:28 -->
+- | MagicDocs | 100% | | Commands | ~50 命令 | | Hooks | ~30 核心 | [score=0.812 recalls=0 avg=0.620 source=memory/2026-04-17.md:26-28]
+
+## Promoted From Short-Term Memory (2026-04-26)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:18:18 -->
+- Client (REST/WebSocket) → api-gateway → Pulsar (消息主干) [score=0.867 recalls=0 avg=0.620 source=memory/2026-04-19.md:18-18]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-20.md:18:18 -->
+- **审计方法**： [score=0.842 recalls=0 avg=0.620 source=memory/2026-04-20.md:18-18]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:8:9 -->
+- Repo: `trustgraph-ai/trustgraph` ⭐ 1,994 | Apache 2.0 | Python | 101MB Docs: https://docs.trustgraph.ai [score=0.835 recalls=0 avg=0.620 source=memory/2026-04-19.md:8-9]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-19.md:11:11 -->
+- **定位**: AI Agent 上下文开发平台，将数据转化为结构化知识图谱供 Agent 推理 [score=0.835 recalls=0 avg=0.620 source=memory/2026-04-19.md:11-11]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-18.md:7:7 -->
+- **时间**: 2026-04-18 下午 [score=0.834 recalls=0 avg=0.620 source=memory/2026-04-18.md:7-7]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-18.md:33:36 -->
+- memory_hook.mjs (纯 JS, legacy hook) ├── onAgentBootstrap() → 注入 L0 身份到 Agent 上下文 ✅ ├── onMessagePreprocessed() → 实时分类消息 + 存储记忆 ⚠️ └── onSessionPatch() → 会话结束时触发最终保存 [score=0.834 recalls=0 avg=0.620 source=memory/2026-04-18.md:33-36]
