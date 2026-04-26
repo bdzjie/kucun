@@ -1,10 +1,10 @@
 {
   "lastChecks": {
-    "email": "2026-04-26T09:11:47.369091Z",
-    "calendar": "2026-04-26T09:11:47.369091Z",
-    "weather": "2026-04-26T07:30:00Z",
+    "email": "2026-04-26T14:23:00Z",
+    "calendar": "2026-04-26T14:23:00Z",
+    "weather": "2026-04-26T14:23:00Z",
     "memory_maintenance": "2026-04-26T00:05:00Z",
-    "git_status": "2026-04-26T12:40:06.123250Z",
+    "git_status": "2026-04-26T14:23:00Z",
     "skills_health": "2026-04-26T06:51:00Z",
     "proactive_memory": "2026-04-26T12:40:53.863913Z"
   },
@@ -20,12 +20,12 @@
   "notes": {
     "calendar": "no calendar client configured",
     "email": "no email client configured",
-    "git_status": "Pushed 8e049ee: reflexion/self-eval/failure-recorder/journal modules + skills fix",
+    "git_status": "Pushed 60f366c. bcbec0e (BM25 hybrid_weight) pending push — GitHub HTTPS throttle.",
     "invest": "stock_data.py real-time data - quote/quant/news all working",
-    "mflow": "M-flow Phase 1+2+3 done (2026-04-24T09:23): cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator + cone_vector + canvas UI. BM25 hybrid_weight exposed 2026-04-26.",
-    "skills_health": "avg=93.4 (2026-04-26 21:39), noTrigger=0, lowQuality=0 — YAML parse rewrite fixed 26 noTrigger",
-    "canvas": "routing-dashboard.html updated with Memory Query panel. canvas/ and canvas-host/ are separate dirs (canvas=actual served, canvas-host=git tracked)",
-    "proactive_memory": "No suggestions - reflexion/eval buffers still empty (newly created today)",
-    "weather": "19C Sunny wind13km/h humidity76% �� ��������"
+    "mflow": "M-flow Phase 1+2+3: cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator + cone_vector + canvas UI. BM25 hybrid_weight exposed 2026-04-26.",
+    "skills_health": "avg=93.4 (2026-04-26 21:39), noTrigger=0, lowQuality=0",
+    "canvas": "routing-dashboard.html updated with Memory Query panel",
+    "proactive_memory": "Reflexion/eval/failure buffers populated 2026-04-26",
+    "weather": "19C Sunny wind12km/h S humidity72% 玉环市 (2026-04-26 22:23 UTC+8)"
   }
 }
