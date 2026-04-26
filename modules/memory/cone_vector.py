@@ -68,8 +68,6 @@ class ConeVectorIndex:
         self._dim: Optional[int] = dim
         self._vectorizer: Optional[TfidfVectorizer] = None
         self.fitted = False
-        # Lazy load: if True, do NOT auto-load from disk in __init__
-        self._lazy = lazy
 
         self.entity_ids: list[str] = []
         self.entity_vectors: Optional[np.ndarray] = None
@@ -87,8 +85,17 @@ class ConeVectorIndex:
 
         # ── BM25 (optional) ────────────────────────────────────────
         self._bm25_index: Optional["BM25Okapi"] = None
-        # Flat corpus for BM25: [(node_type, node_id, text)]
-        self._bm25_corpus: list[tuple[str, str, str]] = []
+        # Flat corpus for BM25: list of tokenized texts (list[list[str]])
+        self._bm25_corpus_texts: list[list[str]] = []
+        self._bm25_corpus_meta: list[tuple[str, str, str]] = []  # (node_type, node_id, raw_text)
+
+        # ── Lazy loading ──────────────────────────────────────────
+        # If lazy=True, do NOT auto-load from disk in __init__.
+        # Call load() manually after construction when ready.
+        self._lazy = lazy
+        if not lazy:
+            self.load()
+
         # BM25 parameters (exposed to caller)
         self._bm25_k1: float = bm25_k1
         self._bm25_b: float = bm25_b
@@ -157,16 +164,31 @@ class ConeVectorIndex:
             self.facetpoint_vectors = vecs
             cursor += n
 
-        # Record BM25 corpus entries for all node types (fit builds index below)
+        # Record BM25 corpus entries for all node types
         if entities:
             for e in entities:
-                self._bm25_corpus.append(("entity", e["id"], f"{e['name']} {e.get('entity_type', '')}".strip()))
+                raw = f"{e['name']} {e.get('entity_type', '')}".strip()
+                self._bm25_corpus_meta.append(("entity", e["id"], raw))
+                self._bm25_corpus_texts.append(raw.split())
         if facetpoints:
             for fp in facetpoints:
-                self._bm25_corpus.append(("facetpoint", fp["id"], fp.get("content", "")))
+                raw = fp.get("content", "")
+                self._bm25_corpus_meta.append(("facetpoint", fp["id"], raw))
+                self._bm25_corpus_texts.append(raw.split())
         if episodes:
             for ep in episodes:
-                self._bm25_corpus.append(("episode", ep["id"], ep.get("summary", "")))
+                raw = ep.get("summary", "")
+                self._bm25_corpus_meta.append(("episode", ep["id"], raw))
+                self._bm25_corpus_texts.append(raw.split())
+
+        # Build BM25 index from tokenized corpus
+        if BM25_AVAILABLE and self._bm25_corpus_texts:
+            try:
+                self._bm25_index = BM25Okapi(self._bm25_corpus_texts, k1=self._bm25_k1, b=self._bm25_b)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"[cone_vector] BM25 index build failed ({e})")
+                self._bm25_index = None
 
         if episodes:
             n = len(episodes)
@@ -286,28 +308,20 @@ class ConeVectorIndex:
             search_index(self._episode_index, self.episode_ids, "episode")
 
         # ── BM25 keyword boost (rank_bm25 scores keyword matches better than TF-IDF) ──
-        if hybrid_weight > 0 and hybrid_weight < 1 and BM25_AVAILABLE and self._bm25_index and self._bm25_corpus:
+        if hybrid_weight > 0 and hybrid_weight < 1 and BM25_AVAILABLE and self._bm25_index and self._bm25_corpus_texts:
             try:
                 bm25_scores = self._bm25_index.get_scores(query.split())
-                # Merge BM25 scores into existing results
-                type_offsets = {"entity": 0, "facetpoint": len(self.entity_ids),
-                                "episode": len(self.entity_ids) + len(self.facetpoint_ids)}
+                # Build id→position map from _bm25_corpus_meta (safe O(1) lookup)
+                bm25_pos_map: dict[str, int] = {}
+                for pos, (_, nid, _) in enumerate(self._bm25_corpus_meta):
+                    bm25_pos_map[nid] = pos
+
+                max_bm25 = max(bm25_scores) + 1e-9
                 for idx, (ntype, nid, existing_score) in enumerate(results):
-                    offset = type_offsets.get(ntype, 0)
-                    # Find position in BM25 corpus (assumes entity/facetpoint/ep ordering matches)
-                    if ntype == "entity":
-                        bm25_idx = self.entity_ids.index(nid) if nid in self.entity_ids else -1
-                    elif ntype == "facetpoint":
-                        bm25_idx = len(self.entity_ids) + (
-                            self.facetpoint_ids.index(nid) if nid in self.facetpoint_ids else -1
-                        )
-                    else:
-                        bm25_idx = len(self.entity_ids) + len(self.facetpoint_ids) + (
-                            self.episode_ids.index(nid) if nid in self.episode_ids else -1
-                        )
+                    bm25_idx = bm25_pos_map.get(nid, -1)
                     if 0 <= bm25_idx < len(bm25_scores):
                         # Hybrid: (1 - hybrid_weight) * TF-IDF cosine + hybrid_weight * BM25_norm
-                        bm25_norm = float(bm25_scores[bm25_idx]) / (max(bm25_scores) + 1e-9)
+                        bm25_norm = float(bm25_scores[bm25_idx]) / max_bm25
                         hybrid = (1 - hybrid_weight) * existing_score + hybrid_weight * bm25_norm
                         results[idx] = (ntype, nid, hybrid)
             except Exception as e:
@@ -339,7 +353,7 @@ class ConeVectorIndex:
             vocab=json.dumps(vocab_int),
             idf=np.array(idf_list),
             train_texts=json.dumps(self._train_texts),
-            bm25_corpus=json.dumps(self._bm25_corpus),  # list of (type, id, text)
+            bm25_corpus=json.dumps(self._bm25_corpus_meta),  # list of (type, id, text)
         )
         return path
 
@@ -386,14 +400,28 @@ class ConeVectorIndex:
 
         # Restore BM25 corpus (list of [type, id, text])
         raw_bm25_corpus = _decode_str(data.get("bm25_corpus"), "[]")
-        bm25_corpus: list[tuple[str, str, str]] = []
+        bm25_corpus_meta: list[tuple[str, str, str]] = []
+        bm25_corpus_texts: list[list[str]] = []
         if raw_bm25_corpus:
             try:
                 parsed = json.loads(raw_bm25_corpus)
-                bm25_corpus = [(str(x[0]), str(x[1]), str(x[2])) for x in parsed]
+                for x in parsed:
+                    raw = str(x[2]) if len(x) > 2 else ""
+                    bm25_corpus_meta.append((str(x[0]), str(x[1]), raw))
+                    bm25_corpus_texts.append(raw.split())
             except Exception:
-                pass  # corrupted — rebuild from vectorizer texts if available
-        self._bm25_corpus = bm25_corpus
+                pass  # corrupted — rebuild from texts if available
+        self._bm25_corpus_meta = bm25_corpus_meta
+        self._bm25_corpus_texts = bm25_corpus_texts
+
+        # Rebuild BM25 index from restored corpus
+        if BM25_AVAILABLE and self._bm25_corpus_texts:
+            try:
+                self._bm25_index = BM25Okapi(self._bm25_corpus_texts, k1=self._bm25_k1, b=self._bm25_b)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"[cone_vector] BM25 index rebuild failed: {e}")
+                self._bm25_index = None
 
         if train_texts and len(idf_arr) > 0:
             # Safely reconstruct TF-IDF vectorizer
