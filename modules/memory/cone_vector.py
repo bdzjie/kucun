@@ -60,12 +60,16 @@ class ConeVectorIndex:
     (or sklearn NN as fallback) for fast approximate nearest-neighbor search.
     """
 
-    def __init__(self, dim: Optional[int] = None):
-        # dim is now the ACTUAL vocabulary size after fitting, not a hard cap.
+    def __init__(self, dim: Optional[int] = None, lazy: bool = False, bm25_k1: float = 1.5, bm25_b: float = 0.75):
+        # dim is the ACTUAL vocabulary size after fitting, not a hard cap.
         # If None, TF-IDF determines vocabulary size automatically.
+        # lazy: if True, do NOT auto-load from disk in __init__
+        # bm25_k1 / bm25_b: BM25 ranking parameters (exposed per call)
         self._dim: Optional[int] = dim
         self._vectorizer: Optional[TfidfVectorizer] = None
         self.fitted = False
+        # Lazy load: if True, do NOT auto-load from disk in __init__
+        self._lazy = lazy
 
         self.entity_ids: list[str] = []
         self.entity_vectors: Optional[np.ndarray] = None
@@ -85,6 +89,9 @@ class ConeVectorIndex:
         self._bm25_index: Optional["BM25Okapi"] = None
         # Flat corpus for BM25: [(node_type, node_id, text)]
         self._bm25_corpus: list[tuple[str, str, str]] = []
+        # BM25 parameters (exposed to caller)
+        self._bm25_k1: float = bm25_k1
+        self._bm25_b: float = bm25_b
 
     @property
     def vectorizer(self) -> TfidfVectorizer:
@@ -150,14 +157,22 @@ class ConeVectorIndex:
             self.facetpoint_vectors = vecs
             cursor += n
 
+        # Record BM25 corpus entries for all node types (fit builds index below)
+        if entities:
+            for e in entities:
+                self._bm25_corpus.append(("entity", e["id"], f"{e['name']} {e.get('entity_type', '')}".strip()))
+        if facetpoints:
+            for fp in facetpoints:
+                self._bm25_corpus.append(("facetpoint", fp["id"], fp.get("content", "")))
+        if episodes:
+            for ep in episodes:
+                self._bm25_corpus.append(("episode", ep["id"], ep.get("summary", "")))
+
         if episodes:
             n = len(episodes)
             vecs = self.vectorizer.transform(all_texts[cursor:cursor + n]).toarray().astype("float32")
             self.episode_vectors = vecs
             cursor += n
-            # Record BM25 corpus entry for this episode
-            for ep in episodes:
-                self._bm25_corpus.append(("episode", ep["id"], ep.get("summary", "")))
 
         self._build_indexes()
 
@@ -187,18 +202,18 @@ class ConeVectorIndex:
                 idx.add(v)
                 return idx
 
-            self._entity_index = make_safe("entity", self.entity_vectors, make_index)                 if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
-            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_index)                 if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
-            self._episode_index = make_safe("episode", self.episode_vectors, make_index)                 if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
+            self._entity_index = make_safe("entity", self.entity_vectors, make_index) if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
+            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_index) if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
+            self._episode_index = make_safe("episode", self.episode_vectors, make_index) if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
         else:
             def make_nn(vecs):
                 nn = NearestNeighbors(n_neighbors=min(5, len(vecs)), metric="cosine")
                 nn.fit(vecs)
                 return nn
 
-            self._entity_index = make_safe("entity", self.entity_vectors, make_nn)                 if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
-            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_nn)                 if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
-            self._episode_index = make_safe("episode", self.episode_vectors, make_nn)                 if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
+            self._entity_index = make_safe("entity", self.entity_vectors, make_nn) if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
+            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_nn) if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
+            self._episode_index = make_safe("episode", self.episode_vectors, make_nn) if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
 
 
     # ── Search ────────────────────────────────────────────────────────

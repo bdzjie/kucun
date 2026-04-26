@@ -55,8 +55,9 @@ class MemoryOrchestrator:
         self.propagator = GraphPropagator(self.store)
         self.assembler = BundleAssembler(self.store)
         # Try to load vector index from disk
-        self.vector_index = ConeVectorIndex()
-        self._vector_index_loaded = self.vector_index.load()
+        # Lazy load vector index on first query (avoids startup cost)
+        self.vector_index = ConeVectorIndex(lazy=True)
+        self._vector_index_loaded = False
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -79,6 +80,10 @@ class MemoryOrchestrator:
         Returns:
             MemoryBundle with episodes, facets, facetpoints, entities, scores
         """
+        # Lazy load vector index on first use
+        if not self._vector_index_loaded:
+            self._vector_index_loaded = self.vector_index.load()
+
         # Step 1: Route query to appropriate layer
         router_result = classify(text)
 
