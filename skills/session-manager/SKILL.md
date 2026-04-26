@@ -10,6 +10,8 @@ triggers:
   - "/session-manager --snapshot [session-id]"
   - "/session-manager --restore [session-id] [snapshot-id]"
 
+---
+
 # ============================================================
 # Session Manager
 # ============================================================

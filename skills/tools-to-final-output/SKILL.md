@@ -9,6 +9,8 @@ triggers:
   - "/tools-to-final-output --unregister [tool-name]"
   - "/tools-to-final-output --test [tool-name] [input]"
 
+---
+
 # ============================================================
 # ToolsToFinalOutput Pattern
 # ============================================================

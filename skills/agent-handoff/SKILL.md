@@ -8,6 +8,8 @@ triggers:
   - "/agent-handoff --status [name]"
   - "/agent-handoff --register [config]"
 
+---
+
 # ============================================================
 # Agent Handoff System
 # ============================================================

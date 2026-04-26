@@ -1,0 +1,63 @@
+{
+  "query": "test pure tfidf",
+  "mode": "episodic",
+  "hybrid_weight": 0.0,
+  "retrieval_mode": "episodic",
+  "router_result": {
+    "layer": "episode",
+    "confidence": 0.3,
+    "keywords": [
+      "test",
+      "pure",
+      "tfidf"
+    ]
+  },
+  "results": [
+    {
+      "id": "ep_001",
+      "summary": "user: Hey, can you remind me about the Q1 product launch deadline?\nassistant: The Q1 product launch is scheduled for March 15th, 2024.",
+      "score": 1.0,
+      "source_session": "sess_001",
+      "source_type": "conversation",
+      "timestamp": "2026-04-24T13:12:31.553094",
+      "facets": []
+    },
+    {
+      "id": "ep_002",
+      "summary": "user: What did Maria say in the last standup about the deadline?\nassistant: Maria said she was not told about the deadline change.",
+      "score": 1.0,
+      "source_session": "sess_002",
+      "source_type": "conversation",
+      "timestamp": "2026-04-24T13:12:31.556093",
+      "facets": []
+    },
+    {
+      "id": "ep_003",
+      "summary": "user: Let's schedule the design review for next Tuesday.\nassistant: I've scheduled the design review for February 20th.",
+      "score": 1.0,
+      "source_session": "sess_003",
+      "source_type": "conversation",
+      "timestamp": "2026-04-24T13:12:31.561273",
+      "facets": []
+    },
+    {
+      "id": "ep_004",
+      "summary": "user: The client sent over their feedback on the proposal.\nassistant: Great, I've received the client feedback and will review it today.",
+      "score": 1.0,
+      "source_session": "sess_004",
+      "source_type": "conversation",
+      "timestamp": "2026-04-24T13:12:31.565283",
+      "facets": []
+    },
+    {
+      "id": "ep_005",
+      "summary": "user: Can you summarize the key points from the all-hands meeting?\nassistant: The main points were: 1) Q1 targets on track, 2) New hire starting March 1st.",
+      "score": 1.0,
+      "source_session": "sess_005",
+      "source_type": "conversation",
+      "timestamp": "2026-04-24T13:12:31.569283",
+      "facets": []
+    }
+  ],
+  "total_episodes": 5
+}

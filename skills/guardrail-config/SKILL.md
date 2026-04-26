@@ -10,6 +10,8 @@ triggers:
   - "/guardrail-config --disable [name]"
   - "/guardrail-config --add [config]"
 
+---
+
 # ============================================================
 # Tool Guardrail Configuration
 # ============================================================

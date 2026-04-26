@@ -301,3 +301,22 @@ Today Completed:
 - **时间**: 2026-04-18 下午 [score=0.834 recalls=0 avg=0.620 source=memory/2026-04-18.md:7-7]
 <!-- openclaw-memory-promotion:memory:memory/2026-04-18.md:33:36 -->
 - memory_hook.mjs (纯 JS, legacy hook) ├── onAgentBootstrap() → 注入 L0 身份到 Agent 上下文 ✅ ├── onMessagePreprocessed() → 实时分类消息 + 存储记忆 ⚠️ └── onSessionPatch() → 会话结束时触发最终保存 [score=0.834 recalls=0 avg=0.620 source=memory/2026-04-18.md:33-36]
+
+## Promoted From Short-Term Memory (2026-04-27)
+
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:13:13 -->
+- python modules/add_triggers.py [score=0.878 recalls=0 avg=0.620 source=memory/2026-04-21.md:13-13]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:7:7 -->
+- 更新 `skills_health` SOP，接入自动评分： [score=0.845 recalls=0 avg=0.620 source=memory/2026-04-21.md:7-7]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:10:10 -->
+- python modules/fix_frontmatter.py --fix [score=0.845 recalls=0 avg=0.620 source=memory/2026-04-21.md:10-10]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:16:16 -->
+- python scripts/heartbeat_skills_health.py [score=0.845 recalls=0 avg=0.620 source=memory/2026-04-21.md:16-16]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:19:19 -->
+- 更新 `memory_maintenance` SOP，接入 Ontology： [score=0.845 recalls=0 avg=0.620 source=memory/2026-04-21.md:19-19]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-21.md:21:22 -->
+- python modules/ontology_task_update.py done <task_id> python modules/ontology_task_update.py add-task 'New Feature' [score=0.845 recalls=0 avg=0.620 source=memory/2026-04-21.md:21-22]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-20.md:23:23 -->
+- **结果**：全部通过，无恶意模式 [score=0.841 recalls=0 avg=0.620 source=memory/2026-04-20.md:23-23]
+<!-- openclaw-memory-promotion:memory:memory/2026-04-22.md:66:66 -->
+- 用户要求将 Heartbeat 天气检查地点从上海改为**玉环市**（浙江台州）。 [score=0.835 recalls=0 avg=0.620 source=memory/2026-04-22.md:66-66]

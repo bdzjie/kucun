@@ -7,6 +7,8 @@ description: >
 triggers:
   - "/session-compactor [session-id] [--mode auto|aggressive|conservative|summary]"
 
+---
+
 # ============================================================
 # Session Compaction Protocol
 # ============================================================
