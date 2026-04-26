@@ -1,3 +1,4 @@
+---
 name: tools-to-final-output
 description: >
   ToolsToFinalOutput pattern - mark tool results as final agent output.

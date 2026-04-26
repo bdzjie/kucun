@@ -1,3 +1,4 @@
+---
 name: agent-handoff
 description: >
   Agent-to-agent handoff system inspired by OpenAI Agents SDK.
@@ -16,42 +17,16 @@ triggers:
 #
 # Handoff Flow:
 #   1. Agent A completes its specialized task
-#   2. Handoff is triggered to Agent B
-#   3. Optional: HandoffInputFilter transforms input
-#   4. Optional: History nesting preserves context
-#   5. Agent B receives transformed input
+#   2. Handoff handler filters/transforms context
+#   3. Agent B receives updated context
+#   4. Agent B continues with refined task
 #
-# Example Config:
-#   {
-#     "toAgent": "researcher",
-#     "description": "Transfer to research specialist",
-#     "inputFilter": "summarize",
-#     "nestHistory": true
-#   }
-
-# ============================================================
-# Handoff Configuration
-# ============================================================
+# Features:
+#   - Named agent configurations
+#   - Input filtering (whitelist context keys)
+#   - Context injection during handoff
+#   - Handoff history tracking
 #
-# Registered handoffs stored at:
-#   ~/.openclaw/memory/handoffs.json
-#
-# Each handoff:
-#   - agentName: Target agent name
-#   - description: Human-readable description
-#   - inputFilter: "none" | "summarize" | "context_add"
-#   - nestHistory: true | false
-#   - tools: Tools to pass to target agent
-
-# ============================================================
-# Usage
-# ============================================================
-#
-# List registered handoffs:
-#   /agent-handoff --list
-#
-# Check handoff status:
-#   /agent-handoff --status researcher
-#
-# Register a new handoff:
-#   /agent-handoff --register {"toAgent":"researcher","description":"...","nestHistory":true}
+# Files:
+#   ~/.openclaw/memory/handoff_config.json
+#   ~/.openclaw/memory/handoff_history.jsonl

@@ -14,12 +14,51 @@ REPORT_PATH = WORKSPACE / "memory" / "skill-audit.json"
 
 def extract_frontmatter(content: str) -> dict:
     """Extract YAML frontmatter from SKILL.md"""
-    match = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+    match = re.match(r'^---\n(.*?)(?:\n---|$)', content, re.DOTALL)
     if not match:
         return {}
     try:
-        fm = yaml.safe_load(match.group(1))
-        return fm if isinstance(fm, dict) else {}
+        # Handle multi-document YAML (some SKILL.md files have name: at top + --- block later)
+        raw = match.group(1)
+        try:
+            docs = list(yaml.safe_load_all('---\n' + raw + '\n---'))
+            fm = {}
+            for doc in docs:
+                if doc:
+                    fm.update(doc)
+        except Exception:
+            fm = {"name": "", "description": ""}
+        # Flatten nested YAML structures (metadata.openclaw.name, etc.)
+        if not isinstance(fm, dict):
+            return {}
+        # Direct fields
+        name = fm.get('name', '') or ''
+        description = fm.get('description', '') or ''
+        # Fallback: scan whole content for 'name: xxx' at top (no proper frontmatter)
+        if not name:
+            m = re.search(r'^name:\s*(.+?)\s*$', content, re.MULTILINE)
+            if m:
+                name = m.group(1).strip()
+        if not description:
+            m = re.search(r'^description:\s*(?:>\n\s*(.+?)(?:\n|$)|(.+?)(?:\n|$))', content, re.MULTILINE)
+            if m:
+                description = (m.group(1) or m.group(2) or '').strip()
+        # Nested: metadata.openclaw.name, metadata.openclaw.description
+        metadata = fm.get('metadata', {}) or {}
+        if isinstance(metadata, dict):
+            openclaw = metadata.get('openclaw', {}) or {}
+            name = name or openclaw.get('name', '') or ''
+            description = description or openclaw.get('description', '') or ''
+        # Deep flatten: also check metadata.openclaw.* paths
+        name_out = name
+        desc_out = description
+        if not name_out or not desc_out:
+            metadata = fm.get('metadata', {}) or {}
+            if isinstance(metadata, dict):
+                openclaw = metadata.get('openclaw', {}) or {}
+                name_out = name_out or openclaw.get('name', '') or ''
+                desc_out = desc_out or openclaw.get('description', '') or ''
+        return {'name': name_out or '', 'description': desc_out or ''}
     except:
         return {}
 

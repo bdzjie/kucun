@@ -1,3 +1,4 @@
+---
 name: lifecycle-tracing
 description: >
   Comprehensive lifecycle tracing for OpenClaw agent runs.

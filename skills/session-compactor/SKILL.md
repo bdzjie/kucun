@@ -1,3 +1,4 @@
+---
 name: session-compactor
 description: >
   Compact session memory to save tokens and improve performance.

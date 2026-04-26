@@ -1,3 +1,4 @@
+---
 name: guardrail-config
 description: >
   Manage tool guardrail configurations.
