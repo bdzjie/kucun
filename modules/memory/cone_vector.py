@@ -53,8 +53,10 @@ class ConeVectorIndex:
     (or sklearn NN as fallback) for fast approximate nearest-neighbor search.
     """
 
-    def __init__(self, dim: int = 512):
-        self.dim = dim
+    def __init__(self, dim: Optional[int] = None):
+        # dim is now the ACTUAL vocabulary size after fitting, not a hard cap.
+        # If None, TF-IDF determines vocabulary size automatically.
+        self._dim: Optional[int] = dim
         self._vectorizer: Optional[TfidfVectorizer] = None
         self.fitted = False
 
@@ -75,7 +77,8 @@ class ConeVectorIndex:
     @property
     def vectorizer(self) -> TfidfVectorizer:
         if self._vectorizer is None:
-            self._vectorizer = TfidfVectorizer(max_features=self.dim)
+            # No max_features cap — vocabulary determined from training data
+            self._vectorizer = TfidfVectorizer()
         return self._vectorizer
 
     # ── Fit / Build ───────────────────────────────────────────────────
@@ -117,6 +120,8 @@ class ConeVectorIndex:
 
         self._train_texts = all_texts[:]  # save for reload
         self.vectorizer.fit(all_texts)
+        # Record actual vocabulary size (the true vector dimension)
+        self._dim = len(self.vectorizer.vocabulary_)
         self.fitted = True
 
         # Build vectors per type
@@ -178,9 +183,10 @@ class ConeVectorIndex:
         """Transform query using stored vectorizer vocabulary."""
         # Use sklearn's transform but work around validation issues
         # by setting n_features_in_ to match vocabulary size
-        vocab_size = len(self.vectorizer.vocabulary_) if hasattr(self.vectorizer, 'vocabulary_') else self.dim
+        # Use actual vocabulary size; _dim is set after fit()
+        actual_dim = len(self.vectorizer.vocabulary_) if hasattr(self.vectorizer, 'vocabulary_') else (self._dim or 512)
         if hasattr(self.vectorizer, 'n_features_in_'):
-            self.vectorizer.n_features_in_ = vocab_size
+            self.vectorizer.n_features_in_ = actual_dim
         # Transform
         vec = self.vectorizer.transform([query]).toarray().astype("float32")
         if FAISS_AVAILABLE:
@@ -285,10 +291,11 @@ class ConeVectorIndex:
 
         if train_texts and len(idf_arr) > 0:
             # Fit a fresh vectorizer on training texts, then restore stored idf
-            v = TfidfVectorizer(max_features=self.dim)
+            v = TfidfVectorizer()
             v.fit(train_texts)
             v.idf_ = idf_arr
             self._vectorizer = v
+            self._dim = len(v.vocabulary_)  # record actual dimension after reload
 
         self._build_indexes()
         self.fitted = True

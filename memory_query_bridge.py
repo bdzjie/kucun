@@ -24,7 +24,15 @@ def main():
         print("Usage: python memory_query_bridge.py <query> [mode]")
         sys.exit(1)
 
-    query_text = sys.argv[1]
+    query_text = sys.argv[1].strip()
+    if not query_text:
+        error_state = {"error": "Empty query", "query": "", "results": []}
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(error_state, f)
+        shutil.copy2(STATE_FILE, CANVAS_DIR / "memory_query_state.json")
+        print("ERROR: empty query")
+        sys.exit(0)
+
     mode = sys.argv[2] if len(sys.argv) > 2 else "episodic"
 
     # Add workspace to path
