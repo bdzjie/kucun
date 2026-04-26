@@ -210,11 +210,30 @@ class MemoryOrchestrator:
         Procedural memory: extract reusable abstract patterns.
         Stores habits, workflows, decision rules, naming conventions.
         """
-        # Procedural mode: look for Episodes tagged as "procedure" or "workflow"
-        with self.store._init_db or self.store:
-            pass  # placeholder for now
-        # TODO: implement procedural extraction
-        return self._empty_bundle(router_result, "procedural")
+        # Procedural: find Episodes tagged procedure/workflow for current query context
+        try:
+            all_eps = self.store.get_all_episodes()
+            keywords = set(router_result.keywords)
+            scored = []
+            for ep in all_eps:
+                ep_tags = set(t.lower() for t in getattr(ep, 'tags', []))
+                ep_words = set((ep.summary or '').lower().split())
+                overlap = len(keywords & ep_tags) + len(keywords & ep_words) * 0.5
+                if overlap > 0:
+                    scored.append((ep, overlap))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            top_eps = [ep for ep, _ in scored[:top_k]]
+            return MemoryBundle(
+                episodes=top_eps,
+                facets=[],
+                facetpoints=[],
+                entities=[],
+                scores={ep.id: score for ep, score in scored[:top_k]},
+                retrieval_mode="procedural",
+                router_result=router_result,
+            )
+        except Exception:
+            return self._empty_bundle(router_result, "procedural")
 
     # ── Anchor Finding ───────────────────────────────────────────────────
 

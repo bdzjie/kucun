@@ -391,6 +391,163 @@ class AkShareConnector(BaseConnector):
 
 
 # ============================================================================
+# Yahoo Finance Connector
+# ============================================================================
+
+class YahooConnector(BaseConnector):
+    """
+    Yahoo Finance connector for international indexes.
+
+    Supported indexes:
+      ^XU100  — BIST 100 (Istanbul Stock Exchange, Turkey)
+      ^VN30   — VN30 Index (Ho Chi Minh City Stock Exchange, Vietnam)
+      ^HSI    — Hang Seng Index (Hong Kong)
+      ^N225   — Nikkei 225 (Japan)
+      ^FTSE   — FTSE 100 (UK)
+
+    Note: Yahoo Finance API may return 403/429 in some network environments.
+    The connector handles this gracefully with informative error messages.
+    """
+
+    name = "yahoo"
+    source = DataSource.YAHOO
+
+    YAHOO_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://finance.yahoo.com/",
+    }
+
+    def __init__(self):
+        super().__init__()
+        self.cache_ttl = 60
+
+    def _build_url(self, symbol: str) -> str:
+        sym = symbol.lstrip("^")
+        return f"https://query1.finance.yahoo.com/v8/finance/chart/%5E{sym}?interval=1d&range=5d"
+
+    async def get_indicator(self, indicator: str, **kwargs) -> DataResponse:
+        cache_key = f"yh:{indicator}:{kwargs}"
+        cached = self.get_cached(cache_key)
+        if cached:
+            return DataResponse(source=self.source, indicator=indicator,
+                                data=cached, timestamp=time.time(), latency_ms=0, cached=True)
+
+        t0 = time.time()
+        try:
+            import urllib.request
+            import urllib.error
+
+            if indicator == "index_quote":
+                symbol = kwargs.get("symbol", "^XU100").lstrip("^")
+                url = self._build_url(symbol)
+                req = urllib.request.Request(url, headers=self.YAHOO_HEADERS)
+
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    raw = resp.read()
+                    if resp.status == 429:
+                        return DataResponse(
+                            source=self.source, indicator=indicator,
+                            data={"error": "rate_limited", "symbol": symbol,
+                                  "message": "Yahoo Finance rate limited. Retry shortly."},
+                            timestamp=time.time(), latency_ms=int((time.time() - t0) * 1000)
+                        )
+                    data = json.loads(raw)
+
+                result = data.get("chart", {}).get("result", [])
+                if not result:
+                    return DataResponse(source=self.source, indicator=indicator,
+                                        data={"error": "no_data", "symbol": symbol},
+                                        timestamp=time.time(), latency_ms=int((time.time() - t0) * 1000))
+
+                meta = result[0].get("meta", {})
+                price = meta.get("regularMarketPrice")
+                change = meta.get("regularMarketChange")
+                change_pct = meta.get("regularMarketChangePercent")
+
+                symbol_map = {
+                    "XU100": "BIST 100 (Turkey)",
+                    "VN30": "VN30 (Vietnam)",
+                    "HSI": "Hang Seng (Hong Kong)",
+                    "N225": "Nikkei 225 (Japan)",
+                    "FTSE": "FTSE 100 (UK)",
+                }
+                display_name = symbol_map.get(symbol, symbol)
+
+                result_data = {
+                    "symbol": f"^{symbol}",
+                    "name": display_name,
+                    "price": price,
+                    "change": change,
+                    "pct": round(change_pct, 2) if change_pct else None,
+                    "high": meta.get("regularMarketDayHigh"),
+                    "low": meta.get("regularMarketDayLow"),
+                    "volume": meta.get("regularMarketVolume"),
+                    "currency": meta.get("currency"),
+                    "exchange": meta.get("exchangeName", ""),
+                    "market_state": meta.get("marketState", "UNKNOWN"),
+                }
+
+                self.set_cached(cache_key, result_data)
+                return DataResponse(source=self.source, indicator=indicator,
+                                    data=result_data, timestamp=time.time(),
+                                    latency_ms=int((time.time() - t0) * 1000))
+
+            elif indicator == "index_batch":
+                symbols = kwargs.get("symbols", ["XU100", "VN30"])
+                results = {}
+                for sym in symbols:
+                    sym_clean = sym.lstrip("^")
+                    url = self._build_url(sym_clean)
+                    req = urllib.request.Request(url, headers=self.YAHOO_HEADERS)
+                    try:
+                        with urllib.request.urlopen(req, timeout=10) as resp:
+                            data = json.loads(resp.read())
+                        result = data.get("chart", {}).get("result", [])
+                        if result:
+                            meta = result[0].get("meta", {})
+                            results[f"^{sym_clean}"] = {
+                                "price": meta.get("regularMarketPrice"),
+                                "pct": round(meta.get("regularMarketChangePercent", 0), 2),
+                                "change": meta.get("regularMarketChange"),
+                            }
+                    except Exception as e:
+                        results[f"^{sym_clean}"] = {"error": str(e)}
+                return DataResponse(source=self.source, indicator=indicator,
+                                    data=results, timestamp=time.time(),
+                                    latency_ms=int((time.time() - t0) * 1000))
+
+            else:
+                return DataResponse(source=self.source, indicator=indicator,
+                                    data={"error": f"unknown indicator: {indicator}"},
+                                    timestamp=time.time(),
+                                    latency_ms=int((time.time() - t0) * 1000))
+
+        except urllib.error.HTTPError as e:
+            err_data = {"error": f"http_{e.code}", "symbol": kwargs.get("symbol", "")}
+            if e.code in (403, 429):
+                err_data["message"] = "Yahoo Finance access denied or rate limited."
+            return DataResponse(source=self.source, indicator=indicator,
+                                data=err_data, timestamp=time.time(),
+                                latency_ms=int((time.time() - t0) * 1000))
+        except Exception as e:
+            return DataResponse(source=self.source, indicator=indicator,
+                                data={"error": str(e)}, timestamp=time.time(),
+                                latency_ms=int((time.time() - t0) * 1000))
+
+    async def health_check(self) -> bool:
+        try:
+            import urllib.request
+            url = self._build_url("XU100")
+            req = urllib.request.Request(url, headers=self.YAHOO_HEADERS)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status == 200
+        except:
+            return False
+
+
+# ============================================================================
 # Data Connector Manager
 # ============================================================================
 
