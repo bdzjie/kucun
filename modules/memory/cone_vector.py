@@ -3,6 +3,7 @@ cone_vector.py — Vector Index for Cone Graph
 
 Provides fast approximate nearest-neighbor search over
 Entity / FacetPoint / Episode text using TF-IDF + FAISS.
+Optionally pairs with BM25 (rank_bm25) for keyword-aware recall.
 
 For save/load: stores training texts and vocabulary so the
 TF-IDF vectorizer can be fully reconstructed from disk.
@@ -18,6 +19,12 @@ try:
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
+
+try:
+    from rank_bm25 import BM25Okapi
+    BM25_AVAILABLE = True
+except ImportError:
+    BM25_AVAILABLE = False
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
@@ -73,6 +80,11 @@ class ConeVectorIndex:
         self._episode_index = None
 
         self._train_texts: list[str] = []
+
+        # ── BM25 (optional) ────────────────────────────────────────
+        self._bm25_index: Optional["BM25Okapi"] = None
+        # Flat corpus for BM25: [(node_type, node_id, text)]
+        self._bm25_corpus: list[tuple[str, str, str]] = []
 
     @property
     def vectorizer(self) -> TfidfVectorizer:
@@ -143,6 +155,9 @@ class ConeVectorIndex:
             vecs = self.vectorizer.transform(all_texts[cursor:cursor + n]).toarray().astype("float32")
             self.episode_vectors = vecs
             cursor += n
+            # Record BM25 corpus entry for this episode
+            for ep in episodes:
+                self._bm25_corpus.append(("episode", ep["id"], ep.get("summary", "")))
 
         self._build_indexes()
 
@@ -245,6 +260,35 @@ class ConeVectorIndex:
         if node_type in ("episode", "all"):
             search_index(self._episode_index, self.episode_ids, "episode")
 
+        # ── BM25 keyword boost (rank_bm25 scores keyword matches better than TF-IDF) ──
+        if BM25_AVAILABLE and self._bm25_index and self._bm25_corpus:
+            try:
+                bm25_scores = self._bm25_index.get_scores(query.split())
+                # Merge BM25 scores into existing results
+                type_offsets = {"entity": 0, "facetpoint": len(self.entity_ids),
+                                "episode": len(self.entity_ids) + len(self.facetpoint_ids)}
+                for idx, (ntype, nid, existing_score) in enumerate(results):
+                    offset = type_offsets.get(ntype, 0)
+                    # Find position in BM25 corpus (assumes entity/facetpoint/ep ordering matches)
+                    if ntype == "entity":
+                        bm25_idx = self.entity_ids.index(nid) if nid in self.entity_ids else -1
+                    elif ntype == "facetpoint":
+                        bm25_idx = len(self.entity_ids) + (
+                            self.facetpoint_ids.index(nid) if nid in self.facetpoint_ids else -1
+                        )
+                    else:
+                        bm25_idx = len(self.entity_ids) + len(self.facetpoint_ids) + (
+                            self.episode_ids.index(nid) if nid in self.episode_ids else -1
+                        )
+                    if 0 <= bm25_idx < len(bm25_scores):
+                        # Hybrid: 0.7 * TF-IDF cosine + 0.3 * normalized BM25
+                        bm25_norm = float(bm25_scores[bm25_idx]) / (max(bm25_scores) + 1e-9)
+                        hybrid = 0.7 * existing_score + 0.3 * bm25_norm
+                        results[idx] = (ntype, nid, hybrid)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"[cone_vector] BM25 merge failed: {e}")
+
         results.sort(key=lambda x: x[2], reverse=True)
         return results[:top_k]
 
@@ -270,6 +314,7 @@ class ConeVectorIndex:
             vocab=json.dumps(vocab_int),
             idf=np.array(idf_list),
             train_texts=json.dumps(self._train_texts),
+            bm25_corpus=json.dumps(self._bm25_corpus),  # list of (type, id, text)
         )
         return path
 
@@ -313,6 +358,17 @@ class ConeVectorIndex:
         idf_arr = np.array(data.get("idf", []))
         raw_texts = _decode_str(data.get("train_texts"), "[]")
         train_texts = json.loads(raw_texts)
+
+        # Restore BM25 corpus (list of [type, id, text])
+        raw_bm25_corpus = _decode_str(data.get("bm25_corpus"), "[]")
+        bm25_corpus: list[tuple[str, str, str]] = []
+        if raw_bm25_corpus:
+            try:
+                parsed = json.loads(raw_bm25_corpus)
+                bm25_corpus = [(str(x[0]), str(x[1]), str(x[2])) for x in parsed]
+            except Exception:
+                pass  # corrupted — rebuild from vectorizer texts if available
+        self._bm25_corpus = bm25_corpus
 
         if train_texts and len(idf_arr) > 0:
             # Safely reconstruct TF-IDF vectorizer
