@@ -12,63 +12,129 @@ WORKSPACE = Path(os.path.expanduser("C:/Users/Administrator/.openclaw/workspace"
 SKILLS_DIR = WORKSPACE / "skills"
 REPORT_PATH = WORKSPACE / "memory" / "skill-audit.json"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FIXED extract_frontmatter: handles '---  triggers:' on same line as closing ---
+# ─────────────────────────────────────────────────────────────────────────────
 def extract_frontmatter(content: str) -> dict:
-    """Extract YAML frontmatter from SKILL.md"""
-    match = re.match(r'^---\n(.*?)(?:\n---|$)', content, re.DOTALL)
-    if not match:
+    """Extract YAML frontmatter from SKILL.md.
+    
+    Handles two layouts:
+    1. Normal:   ---\nname: ...\n---\nbody
+    2. Malformed: ---\nname: ...\n---  triggers:\n    - /trigger  (--- on same line as triggers:)
+    """
+    # Approach: split manually at the first '---' that appears at start-of-line
+    # The file format is: ---\n<yaml>\n---  <rest_on_same_line>\n<body>
+    # We need to find where '---' starts the closing delimiter (after yaml content)
+    
+    # Find opening --- (must be at start of file)
+    if not content.startswith('---'):
         return {}
+    
+    # Find the first '---' that starts a line (closing delimiter)
+    # It may have content on the same line (e.g. '---  triggers:')
+    # We look for '\n---' where '---' is NOT inside the YAML value strings
+    # Strategy: scan for '\n---' after the opening line, validate it's not in a string
+    
+    # Quick approach: use yaml-safe parsing on the first document
+    # Split at the first '---' that appears at column 0 of a line (after opening ---)
+    yaml_end = content.find('\n---', 4)  # search after '---' + first newline
+    if yaml_end < 0:
+        return {}
+    
+    yaml_block = content[4:yaml_end]  # content between opening --- and closing ---
+    rest_same_line = content[yaml_end+4:]  # content AFTER the closing '---' on same line
+    
+    # Parse the YAML block
     try:
-        # Handle multi-document YAML (some SKILL.md files have name: at top + --- block later)
-        raw = match.group(1)
-        try:
-            docs = list(yaml.safe_load_all('---\n' + raw + '\n---'))
-            fm = {}
-            for doc in docs:
-                if doc:
-                    fm.update(doc)
-        except Exception:
-            fm = {"name": "", "description": ""}
-        # Flatten nested YAML structures (metadata.openclaw.name, etc.)
-        if not isinstance(fm, dict):
-            return {}
-        # Direct fields
-        name = fm.get('name', '') or ''
-        description = fm.get('description', '') or ''
-        # Fallback: scan whole content for 'name: xxx' at top (no proper frontmatter)
-        if not name:
-            m = re.search(r'^name:\s*(.+?)\s*$', content, re.MULTILINE)
-            if m:
-                name = m.group(1).strip()
-        if not description:
-            m = re.search(r'^description:\s*(?:>\n\s*(.+?)(?:\n|$)|(.+?)(?:\n|$))', content, re.MULTILINE)
-            if m:
-                description = (m.group(1) or m.group(2) or '').strip()
-        # Nested: metadata.openclaw.name, metadata.openclaw.description
-        metadata = fm.get('metadata', {}) or {}
-        if isinstance(metadata, dict):
-            openclaw = metadata.get('openclaw', {}) or {}
-            name = name or openclaw.get('name', '') or ''
-            description = description or openclaw.get('description', '') or ''
-        # Deep flatten: also check metadata.openclaw.* paths
-        name_out = name
-        desc_out = description
-        if not name_out or not desc_out:
-            metadata = fm.get('metadata', {}) or {}
-            if isinstance(metadata, dict):
-                openclaw = metadata.get('openclaw', {}) or {}
-                name_out = name_out or openclaw.get('name', '') or ''
-                desc_out = desc_out or openclaw.get('description', '') or ''
-        return {'name': name_out or '', 'description': desc_out or ''}
-    except:
+        docs = list(yaml.safe_load_all('---\n' + yaml_block + '\n---'))
+        fm = {}
+        for doc in docs:
+            if doc:
+                fm.update(doc)
+    except Exception:
+        fm = {"name": "", "description": ""}
+
+    if not isinstance(fm, dict):
         return {}
+
+    # Handle '---  triggers:' on same line as closing delimiter
+    # rest_same_line is like '  triggers:\n    - /exec inline\n\n#...'
+    # Only collect items DIRECTLY under triggers: (stop at first non-item line)
+    triggers_inline = []
+    if rest_same_line.strip().startswith('triggers'):
+        lines = rest_same_line.split('\n')
+        trigger_mode = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped == 'triggers:':
+                trigger_mode = True
+                continue
+            if not trigger_mode:
+                continue
+            if stripped.startswith('- '):
+                t = stripped[2:].strip().strip('"').strip("'")
+                if t:
+                    triggers_inline.append(t)
+            elif stripped and not stripped.startswith('#'):
+                # First non-item, non-comment line: stop
+                break
+
+    # Flatten nested YAML structures (metadata.openclaw.name, etc.)
+    name = fm.get('name', '') or ''
+    description = fm.get('description', '') or ''
+
+    # Fallback: scan content for 'name:' / 'description:' at line start
+    if not name:
+        m = re.search(r'^name:\s*(.+?)\s*$', content, re.MULTILINE)
+        if m:
+            name = m.group(1).strip()
+    if not description:
+        m = re.search(r'^description:\s*(?:>\n\s*(.+?)(?:\n|$)|(.+?)(?:\n|$))', content, re.MULTILINE)
+        if m:
+            description = (m.group(1) or m.group(2) or '').strip()
+
+    # Nested: metadata.openclaw.name / description
+    metadata = fm.get('metadata', {}) or {}
+    if isinstance(metadata, dict):
+        openclaw = metadata.get('openclaw', {}) or {}
+        name = name or openclaw.get('name', '') or ''
+        description = description or openclaw.get('description', '') or ''
+
+    # Triggers: frontmatter YAML triggers + metadata.openclaw.triggers + inline
+    triggers_final = fm.get('triggers', []) or []
+    if isinstance(triggers_final, list):
+        triggers_final = [t for t in triggers_final if t]
+    else:
+        triggers_final = []
+    
+    # metadata.openclaw.triggers
+    if not triggers_final:
+        mdata = fm.get('metadata', {}) or {}
+        if isinstance(mdata, dict):
+            openclaw_mdata = mdata.get('openclaw', {})
+            if isinstance(openclaw_mdata, dict):
+                t = openclaw_mdata.get('triggers', [])
+                if isinstance(t, list) and t:
+                    triggers_final = [x for x in t if x]
+    
+    # Inline '---  triggers:' case
+    if triggers_inline:
+        triggers_final = triggers_final + triggers_inline
+
+    return {
+        'name': name,
+        'description': description,
+        'triggers': triggers_final,
+        'metadata': fm.get('metadata', {}),
+    }
+
 
 def extract_body_triggers(content: str) -> list:
     """Extract triggers from markdown body (after frontmatter)."""
-    # Remove frontmatter
-    match = re.match(r'^---\n.*?\n---\n', content, re.DOTALL)
-    body = content[match.end():] if match else content
+    # Remove frontmatter: find first '---' at start of line, then find closing ---
+    fm_match = re.search(r'^---\n.*?\n---\n', content, re.DOTALL | re.MULTILINE)
+    body = content[fm_match.end():] if fm_match else content
     
-    # Find triggers section: triggers:
     triggers = []
     trigger_match = re.search(r'^triggers:\s*\n((?:\s*-\s*.+\n)+)', body, re.MULTILINE)
     if trigger_match:
@@ -80,6 +146,7 @@ def extract_body_triggers(content: str) -> list:
                     triggers.append(t)
     
     return triggers
+
 
 def audit_skill(skill_dir: Path) -> dict:
     """Audit a single skill directory"""
@@ -162,6 +229,7 @@ def audit_skill(skill_dir: Path) -> dict:
         "hasManifest": has_manifest,
         "fileCount": len(files),
     }
+
 
 def main():
     import argparse
@@ -251,20 +319,11 @@ def main():
                 
                 if new_content != content:
                     skill_md.write_text(new_content, encoding='utf-8')
-                    print(f"  Fixed: {s['id']}")
                     fixed += 1
+                    print(f"  + {s['id']}: added placeholder trigger")
         
         print(f"\n  Fixed {fixed} skills")
-    
-    # Save report
-    report = {
-        "generated": "2026-04-20T15:14:00Z",
-        "summary": {"total": total, "avgScore": round(avg_score, 1), "noTrigger": no_trigger, "lowQuality": low_quality},
-        "skills": skills
-    }
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f"\nReport: {REPORT_PATH}")
+
 
 if __name__ == "__main__":
     main()

@@ -101,7 +101,22 @@ python modules/add_triggers.py
 从 `proactive_memory.mjs` 获取主动推送建议，并在适当时机呈现给用户。
 
 **触发**：上次检查 > 2 小时前
-**主动行为**：检测到矛盾记忆或新主题相关记忆时主动呈现
+
+**数据来源（综合分析）**：
+
+| 来源 | 内容 | 阈值 |
+|------|------|------|
+| memory_rag | 相关历史记忆 | relevance > 0.4 |
+| reflexion_buffer | 相关话题的过往失败/部分成功记录 | keyword overlap > 0 |
+| self_evaluator | 最近评测维度趋势（最弱维度、整体评分） | 有数据时 |
+| failure_recorder | 未确认的高严重度失败记录 | severity=high |
+| reflection_journal | 每日自动生成的反思日志 | 每日一次 |
+
+**surfacingCooldown**: 同一记忆/反射 60 秒内不重复推送
+
+**主动行为**：检测到矛盾记忆、新主题相关记忆、过往失败教训、评测趋势时主动呈现
+
+**输出字段更新**：返回 `reflexionCount`、`evalInsightCount`、`journalCount` 反映各类数据量
 
 ## 主动执行（无需询问）
 

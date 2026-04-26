@@ -26,6 +26,12 @@ import { getMemoryRAG } from './memory_rag.mjs';
 import { getFeedbackStore, recordRetrievalUsed } from './memory_feedback.mjs';
 import { getContextCoreLoader } from './context_core_loader.mjs';
 
+// Reflexion system integration
+import { getReflexionBuffer } from './reflexion_buffer.mjs';
+import { getSelfEvaluator } from './self_evaluator.mjs';
+import { getFailureRecorder } from './failure_recorder.mjs';
+import { getReflectionJournal } from './reflection_journal.mjs';
+
 const PROACTIVE_DIR = join(homedir(), '.openclaw', 'memory', 'proactive');
 
 /**
@@ -56,6 +62,12 @@ export class ProactiveMemory {
     this.feedback = options.feedback || getFeedbackStore();
     this.loader = options.loader || getContextCoreLoader();
     
+    // Reflexion system
+    this.reflexion = options.reflexion || getReflexionBuffer();
+    this.evaluator = options.evaluator || getSelfEvaluator();
+    this.failure = options.failure || getFailureRecorder();
+    this.journal = options.journal || getReflectionJournal();
+    
     this.windowSize = options.windowSize || 10; // Last N messages to analyze
     this.topicThreshold = options.topicThreshold || 0.3; // Min confidence for topic
     this.memoryThreshold = options.memoryThreshold || 0.4; // Min relevance for surfacing
@@ -67,6 +79,7 @@ export class ProactiveMemory {
     
     this.enabled = options.enabled !== false;
     this.lastCheck = null;
+    this.lastJournalGenerated = null; // ISO timestamp of last journal gen
   }
 
   /**
@@ -201,6 +214,155 @@ export class ProactiveMemory {
   }
 
   /**
+   * Find relevant reflexion entries for current topics (failure-guided learning)
+   * Retrieves past failures/partial-successes related to detected topics
+   * and surfaces what to watch out for or try differently.
+   */
+  async findReflexionGuidance(topics, options = {}) {
+    const { maxResults = 3 } = options;
+    const suggestions = [];
+
+    for (const topic of topics) {
+      // Retrieve reflexion entries matching the topic
+      const relevant = this.reflexion.retrieve({
+        taskType: topic.name, // e.g. 'openclaw', 'yaml', 'coding'
+        description: topic.keywords.join(' '),
+        tags: topic.keywords,
+        maxResults: maxResults,
+      });
+
+      for (const entry of relevant) {
+        if (entry.outcome === 'failure') {
+          suggestions.push({
+            type: 'reflexion_failure_warning',
+            topic: topic.name,
+            taskDescription: entry.taskDescription,
+            reflection: entry.reflection,
+            explanation: `Past attempt on "${entry.taskDescription}" failed: ${entry.reflection.slice(0, 100)}`,
+            outcome: entry.outcome,
+            timestamp: entry.timestamp,
+            confidence: topic.confidence,
+          });
+        } else if (entry.outcome === 'partial') {
+          suggestions.push({
+            type: 'reflexion_partial_note',
+            topic: topic.name,
+            taskDescription: entry.taskDescription,
+            reflection: entry.reflection,
+            explanation: `Past attempt: ${entry.reflection.slice(0, 100)}`,
+            outcome: entry.outcome,
+            timestamp: entry.timestamp,
+            confidence: topic.confidence,
+          });
+        }
+      }
+    }
+
+    // Dedupe by taskDescription
+    const seen = new Set();
+    const deduped = [];
+    for (const s of suggestions) {
+      const key = s.taskDescription.slice(0, 40);
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(s);
+      }
+    }
+
+    return deduped.slice(0, maxResults);
+  }
+
+  /**
+   * Get self-evaluation trend insights
+   * Surfaces if a dimension has been declining or is consistently weak
+   */
+  getEvalInsights() {
+    const insights = [];
+    const history = this.evaluator.history;
+
+    if (history.length === 0) return insights;
+
+    // Get weakest dimension trend
+    const weakest = this.evaluator.weakestDimension();
+    if (weakest && weakest.trend === 'declining') {
+      insights.push({
+        type: 'eval_dimension_declining',
+        dimension: weakest.key,
+        label: weakest.label,
+        score: weakest.current,
+        trend: weakest.trend,
+        explanation: `${weakest.label} dimension is declining (${weakest.current}/100). Consider focusing here.`,
+      });
+    }
+
+    // Get latest overall score
+    const latest = history[history.length - 1];
+    if (latest) {
+      insights.push({
+        type: 'eval_latest',
+        overallScore: latest.overallScore,
+        period: latest.taskType,
+        explanation: `Latest self-eval: ${latest.overallScore}/100 — ${latest.strengths.slice(0,1).join(', ') || 'no strengths noted'}`,
+      });
+    }
+
+    return insights;
+  }
+
+  /**
+   * Check if we should generate a daily journal and get recent failures
+   */
+  async checkJournalAndFailures() {
+    const suggestions = [];
+
+    // Recent failures from failure_recorder
+    const recentFailures = this.failure.retrieve({ maxResults: 5 });
+    for (const record of recentFailures) {
+      if (record.severity === 'high') {
+        suggestions.push({
+          type: 'failure_reminder',
+          category: record.category,
+          description: record.description,
+          explanation: `Unacknowledged high-severity failure: ${record.description}. Check if this might affect current work.`,
+          timestamp: record.timestamp,
+        });
+      }
+    }
+
+    // Check if journal generation is due (once per day)
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    if (this.lastJournalGenerated !== today && this.reflexion.entries.length > 0) {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const periodStart = yesterday.toISOString();
+      const periodEnd = now.toISOString();
+
+      try {
+        const entry = this.journal.generate({ periodStart, periodEnd, periodType: 'daily' });
+        if (entry && (entry.reflexionCount > 0 || entry.evalCount > 0 || entry.failureCount > 0)) {
+          suggestions.push({
+            type: 'journal_generated',
+            summary: entry.summary,
+            reflexionCount: entry.reflexionCount,
+            evalCount: entry.evalCount,
+            failureCount: entry.failureCount,
+            nextPeriodFocus: entry.nextPeriodFocus,
+            periodStart,
+            periodEnd,
+            explanation: `Daily journal generated for ${today}: ${entry.summary.slice(0, 120)}`,
+          });
+          this.lastJournalGenerated = today;
+        }
+      } catch (e) {
+        console.warn('[proactive_memory] journal generation error:', e.message);
+      }
+    }
+
+    return suggestions;
+  }
+
+  /**
    * Check for memories that contradict current context
    */
   async detectContradictions(topics) {
@@ -225,6 +387,13 @@ export class ProactiveMemory {
 
   /**
    * Get proactive suggestions for current conversation
+   * 
+   * Integrates:
+   *   - memory_rag: relevant past memories
+   *   - reflexion_buffer: past failures/partial successes related to topics
+   *   - self_evaluator: dimension trends and eval history
+   *   - failure_recorder: unacknowledged recent failures
+   *   - reflection_journal: daily journal generation
    */
   async getProactiveSuggestions(messages, options = {}) {
     if (!this.enabled) {
@@ -240,22 +409,32 @@ export class ProactiveMemory {
       return { suggestions: [], reason: 'no_topics_detected', topics: [] };
     }
 
-    // Step 2: Find relevant memories
+    // Step 2: Find relevant memories (memory_rag)
     const relevantMemories = await this.findRelevantMemories(topics, options);
 
-    if (relevantMemories.length === 0) {
+    // Step 3: Find reflexion guidance (past failures/partial successes)
+    const reflexionGuidance = await this.findReflexionGuidance(topics, options);
+
+    // Step 4: Get self-evaluation insights
+    const evalInsights = this.getEvalInsights();
+
+    // Step 5: Check journal and failures
+    const journalAndFailures = await this.checkJournalAndFailures();
+
+    if (relevantMemories.length === 0 && reflexionGuidance.length === 0 && evalInsights.length === 0 && journalAndFailures.length === 0) {
       return { suggestions: [], reason: 'no_relevant_memories', topics };
     }
 
-    // Step 3: Check for contradictions
+    // Step 6: Check for contradictions
     const contradictions = await this.detectContradictions(topics);
 
-    // Step 4: Build suggestions
-    const suggestions = relevantMemories.map(({ memory, topic, topicConfidence, relevance }) => {
-      // Mark as surfaced
-      this.lastSurfaced.set(memory.content.slice(0, 100), Date.now());
+    // Step 7: Build suggestions from all sources
+    const suggestions = [];
 
-      return {
+    // Memory-rag surfaces
+    for (const { memory, topic, topicConfidence, relevance } of relevantMemories) {
+      this.lastSurfaced.set(memory.content.slice(0, 100), Date.now());
+      suggestions.push({
         type: 'memory_surfaced',
         content: memory.content,
         source: memory.source,
@@ -265,15 +444,30 @@ export class ProactiveMemory {
         score: memory.score,
         provenance: memory.provenanceId,
         explanation: `Relevant to current ${topic} discussion (${(relevance * 100).toFixed(0)}% match)`,
-      };
-    });
+      });
+    }
 
-    // Add contradiction alerts
+    // Reflexion guidance (past failures/partial successes)
+    for (const rg of reflexionGuidance) {
+      suggestions.push(rg);
+    }
+
+    // Self-evaluation insights
+    for (const ei of evalInsights) {
+      suggestions.push(ei);
+    }
+
+    // Journal and failure alerts
+    for (const jf of journalAndFailures) {
+      suggestions.push(jf);
+    }
+
+    // Contradiction alerts
     for (const contr of contradictions) {
       suggestions.push({
         type: 'contradiction_alert',
         topic: contr.topic,
-        explanation: contr.type === 'correction_needed' 
+        explanation: contr.type === 'correction_needed'
           ? 'A previously stored memory about this topic was marked as incorrect'
           : 'Potential conflict detected',
       });
@@ -282,7 +476,10 @@ export class ProactiveMemory {
     return {
       suggestions: suggestions.slice(0, this.maxMemories),
       topics,
-      reason: suggestions.length > 0 ? 'memories_found' : 'none_above_threshold',
+      reflexionCount: reflexionGuidance.length,
+      evalInsightCount: evalInsights.length,
+      journalCount: journalAndFailures.length,
+      reason: suggestions.length > 0 ? 'comprehensive' : 'no_data',
     };
   }
 
