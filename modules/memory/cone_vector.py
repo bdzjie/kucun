@@ -147,7 +147,22 @@ class ConeVectorIndex:
         self._build_indexes()
 
     def _build_indexes(self):
-        """Build FAISS or sklearn indexes for each index type."""
+        """Build FAISS or sklearn indexes for each index type.
+        
+        Graceful degradation: if any single index build fails, it is excluded
+        from search rather than crashing the entire index. This matches the
+        pattern from mcp-memory-service storage abstraction where partial
+        corruption is quarantined, not fatal.
+        """
+        def make_safe(name, vecs, builder_fn):
+            """Build one index; on failure warn and return None."""
+            try:
+                return builder_fn(vecs)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"[cone_vector] {name} index build failed ({e}) — excluded from search")
+                return None
+
         if FAISS_AVAILABLE:
             def make_index(vecs):
                 d_local = vecs.shape[1]
@@ -157,24 +172,18 @@ class ConeVectorIndex:
                 idx.add(v)
                 return idx
 
-            if self.entity_vectors is not None and len(self.entity_ids) > 0:
-                self._entity_index = make_index(self.entity_vectors)
-            if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0:
-                self._fp_index = make_index(self.facetpoint_vectors)
-            if self.episode_vectors is not None and len(self.episode_ids) > 0:
-                self._episode_index = make_index(self.episode_vectors)
+            self._entity_index = make_safe("entity", self.entity_vectors, make_index)                 if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
+            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_index)                 if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
+            self._episode_index = make_safe("episode", self.episode_vectors, make_index)                 if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
         else:
             def make_nn(vecs):
                 nn = NearestNeighbors(n_neighbors=min(5, len(vecs)), metric="cosine")
                 nn.fit(vecs)
                 return nn
 
-            if self.entity_vectors is not None and len(self.entity_ids) > 0:
-                self._entity_index = make_nn(self.entity_vectors)
-            if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0:
-                self._fp_index = make_nn(self.facetpoint_vectors)
-            if self.episode_vectors is not None and len(self.episode_ids) > 0:
-                self._episode_index = make_nn(self.episode_vectors)
+            self._entity_index = make_safe("entity", self.entity_vectors, make_nn)                 if self.entity_vectors is not None and len(self.entity_ids) > 0 else None
+            self._fp_index = make_safe("facetpoint", self.facetpoint_vectors, make_nn)                 if self.facetpoint_vectors is not None and len(self.facetpoint_ids) > 0 else None
+            self._episode_index = make_safe("episode", self.episode_vectors, make_nn)                 if self.episode_vectors is not None and len(self.episode_ids) > 0 else None
 
 
     # ── Search ────────────────────────────────────────────────────────
@@ -206,6 +215,9 @@ class ConeVectorIndex:
             List of (node_type, node_id, score) sorted by similarity descending.
         """
         if not self.fitted:
+            return []
+        if self._vectorizer is None:
+            # Vectorizer reconstruction failed during load() — cannot vectorize query
             return []
 
         q_vec = self._query_vector(query)
@@ -241,10 +253,13 @@ class ConeVectorIndex:
     def save(self, prefix: str = "cone_vector") -> Path:
         """Save all indexes to disk."""
         path = INDEX_DIR / f"{prefix}.npz"
+        # _version enables forward compatibility when npz schema evolves
+        self._version = 2  # bump on any schema change to npz contents
         idf_list = list(self.vectorizer.idf_) if hasattr(self.vectorizer, "idf_") else []
         vocab_int = {k: int(v) for k, v in self.vectorizer.vocabulary_.items()} if hasattr(self.vectorizer, "vocabulary_") else {}
         np.savez(
             path,
+            _version=self._version,
             _dim=self._dim,
             entity_vectors=self.entity_vectors,
             facetpoint_vectors=self.facetpoint_vectors,
@@ -264,6 +279,15 @@ class ConeVectorIndex:
         if not path.exists():
             return False
         data = np.load(path, allow_pickle=True)
+
+        # Version check for forward compatibility (turbovec write/load pattern)
+        saved_version = int(data.get("_version", 1))  # default 1 for older npz files
+        if saved_version != getattr(self, "_version", 2):
+            import warnings
+            warnings.warn(
+                f"[cone_vector] npz version mismatch (file={saved_version}, code={getattr(self, '_version', 2)})"
+                " — attempting load anyway (partial degradation possible)"
+            )
 
         self.entity_ids = data["entity_ids"].tolist()
         self.facetpoint_ids = data["facetpoint_ids"].tolist()
