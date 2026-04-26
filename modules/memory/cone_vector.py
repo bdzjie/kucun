@@ -245,6 +245,7 @@ class ConeVectorIndex:
         vocab_int = {k: int(v) for k, v in self.vectorizer.vocabulary_.items()} if hasattr(self.vectorizer, "vocabulary_") else {}
         np.savez(
             path,
+            _dim=self._dim,
             entity_vectors=self.entity_vectors,
             facetpoint_vectors=self.facetpoint_vectors,
             episode_vectors=self.episode_vectors,
@@ -290,12 +291,82 @@ class ConeVectorIndex:
         train_texts = json.loads(raw_texts)
 
         if train_texts and len(idf_arr) > 0:
-            # Fit a fresh vectorizer on training texts, then restore stored idf
-            v = TfidfVectorizer()
-            v.fit(train_texts)
-            v.idf_ = idf_arr
-            self._vectorizer = v
-            self._dim = len(v.vocabulary_)  # record actual dimension after reload
+            # Safely reconstruct TF-IDF vectorizer
+            try:
+                v = TfidfVectorizer()
+                v.fit(train_texts)
+                # Only restore idf if length matches vocabulary exactly
+                if len(idf_arr) == len(v.vocabulary_):
+                    v.idf_ = idf_arr
+                else:
+                    import warnings
+                    warnings.warn(
+                        f"idf_arr length mismatch ({len(idf_arr)} vs vocab {len(v.vocabulary_)})"
+                        f" — using fitted idf weights"
+                    )
+                self._vectorizer = v
+                self._dim = len(v.vocabulary_)
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Vectorizer reconstruction failed: {e} — building lightweight index")
+                # Fallback: build a minimal vectorizer from vocab alone
+                if vocab:
+                    try:
+                        v = TfidfVectorizer()
+                        # Manually set vocabulary from stored vocab dict
+                        v.fit(list(vocab.keys()))
+                        if len(idf_arr) == len(v.vocabulary_):
+                            v.idf_ = idf_arr
+                        self._vectorizer = v
+                        self._dim = len(v.vocabulary_)
+                    except Exception:
+                        self._vectorizer = None
+                        self._dim = None
+                else:
+                    self._vectorizer = None
+                    self._dim = None
+        else:
+            # No train_texts — build vectorizer from scratch using stored vocab
+            if vocab and len(vocab) > 0:
+                try:
+                    v = TfidfVectorizer()
+                    v.fit(list(vocab.keys()))
+                    if len(idf_arr) >= len(v.vocabulary_):
+                        v.idf_ = idf_arr[:len(v.vocabulary_)]
+                    self._vectorizer = v
+                    self._dim = len(v.vocabulary_)
+                except Exception:
+                    self._vectorizer = None
+                    self._dim = None
+            else:
+                self._vectorizer = None
+                self._dim = None
+
+        # Validate vectors before building indexes
+        for name, vec_arr in [
+            ("entity", self.entity_vectors),
+            ("facetpoint", self.facetpoint_vectors),
+            ("episode", self.episode_vectors),
+        ]:
+            if vec_arr is not None:
+                try:
+                    is_valid = (
+                        hasattr(vec_arr, 'shape') and
+                        len(vec_arr.shape) >= 1 and
+                        vec_arr.shape[0] > 0 and
+                        len(vec_arr.shape) > 1 and
+                        vec_arr.shape[1] > 0
+                    )
+                    if not is_valid:
+                        setattr(self, f"{name}_vectors", None)
+                    elif self._dim is not None and vec_arr.shape[1] != self._dim:
+                        import warnings
+                        warnings.warn(
+                            f"{name}_vectors dimension {vec_arr.shape[1]} != vocab size {self._dim}"
+                        )
+                        setattr(self, f"{name}_vectors", None)
+                except Exception:
+                    setattr(self, f"{name}_vectors", None)
 
         self._build_indexes()
         self.fitted = True
