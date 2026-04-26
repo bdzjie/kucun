@@ -9,9 +9,9 @@ const PY = 'python';
 /**
  * Call memory_query_bridge.py to run a memory query
  */
-function queryMemory(query, mode = 'episodic') {
+function queryMemory(query, mode = 'episodic', hybridWeight = 0.3) {
   const script = `${WORKSPACE}/memory_query_bridge.py`;
-  const cmd = `${PY} "${script}" "${query.replace(/"/g, '\\"')}" ${mode}`;
+  const cmd = `${PY} "${script}" "${query.replace(/"/g, '\\"')}" ${mode} --hybrid-weight=${hybridWeight}`;
   try {
     const output = execSync(cmd, {
       encoding: 'utf-8',
@@ -77,21 +77,28 @@ export default async function handler(input, context) {
       .trim();
   }
 
-  // Parse optional mode from query (e.g., "/memory deadline episodic")
-  const modeMatch = query.match(/\s+(episodic|lexical|unified)\s*$/i);
+  // Parse optional mode and hybrid_weight from query
+  // e.g., "/memory deadline episodic hybrid=0.5" or "/memory project hybrid=0.7"
+  const modeMatch = query.match(/\s+(episodic|lexical|unified|procedural)\s*$/i);
   if (modeMatch) {
     mode = modeMatch[1].toLowerCase();
-    query = query.replace(/\s+(episodic|lexical|unified)\s*$/i, '').trim();
+    query = query.replace(/\s+(episodic|lexical|unified|procedural)\s*$/i, '').trim();
+  }
+  let hybridWeight = 0.3;
+  const hybridMatch = query.match(/hybrid=([\d.]+)/i);
+  if (hybridMatch) {
+    hybridWeight = Math.max(0, Math.min(1, parseFloat(hybridMatch[1])));
+    query = query.replace(/hybrid=[\d.]+/i, '').trim();
   }
 
   if (!query) {
     return {
       success: false,
-      output: `Usage: /memory <query> [episodic|lexical|unified]\n\nExamples:\n  /memory deadline communication\n  /memory what did Maria say about the deadline\n  /memory project status episodic\n\n检索模式:\n  episodic (默认) — 图传播评分，适合精确记忆召回\n  lexical — BM25关键词，适合简单查询\n  unified — 混合模式`,
+      output: `Usage: /memory <query> [episodic|lexical|unified|procedural] [hybrid=W]\n\nExamples:\n  /memory deadline communication\n  /memory project status episodic\n  /memory deadline hybrid=0.7\n\n检索模式:\n  episodic (默认) — 图传播评分，适合精确记忆召回\n  lexical — BM25关键词，适合简单查询\n  unified — 混合模式\n\nhybrid_weight (BM25权重): 0.0=纯TF-IDF, 1.0=纯BM25, 默认0.3`,
     };
   }
 
-  const state = queryMemory(query, mode);
+  const state = queryMemory(query, mode, hybridWeight);
 
   if (!state || state.error) {
     return {

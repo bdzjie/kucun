@@ -22,10 +22,10 @@
     "email": "no email client configured",
     "git_status": "Pushed 8e049ee: reflexion/self-eval/failure-recorder/journal modules + skills fix",
     "invest": "stock_data.py real-time data - quote/quant/news all working",
-    "mflow": "M-flow Phase 1+2+3 done (2026-04-24T09:23): cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator + cone_vector + canvas UI",
-    "skills_health": "avg=91.0 (up from 90.8), noTrigger=5, lowQuality=1",
+    "mflow": "M-flow Phase 1+2+3 done (2026-04-24T09:23): cone_graph/coreference/granularity_router/graph_propagator/memory_orchestrator + cone_vector + canvas UI. BM25 hybrid_weight exposed 2026-04-26.",
+    "skills_health": "avg=93.4 (2026-04-26 21:39), noTrigger=0, lowQuality=0 â€” YAML parse rewrite fixed 26 noTrigger",
     "canvas": "routing-dashboard.html updated with Memory Query panel. canvas/ and canvas-host/ are separate dirs (canvas=actual served, canvas-host=git tracked)",
     "proactive_memory": "No suggestions - reflexion/eval buffers still empty (newly created today)",
-    "weather": "19C Sunny wind13km/h humidity76% ¡ª Óñ»·ÊÐÕý³£"
+    "weather": "19C Sunny wind13km/h humidity76% ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
   }
 }

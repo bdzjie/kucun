@@ -67,6 +67,7 @@ class MemoryOrchestrator:
         mode: str = "episodic",
         top_k: int = 5,
         max_hops: int = 3,
+        hybrid_weight: float = 0.3,
     ) -> MemoryBundle:
         """
         Query the memory system.
@@ -76,6 +77,8 @@ class MemoryOrchestrator:
             mode: "episodic" (default) | "procedural" | "lexical" | "unified"
             top_k: Number of Episodes to return
             max_hops: Max graph propagation hops (episodic mode only)
+            hybrid_weight: BM25 weight in hybrid TF-IDF+BM25 scoring (0.0-1.0).
+                          0.0 = pure TF-IDF, 1.0 = pure BM25. Default 0.3.
 
         Returns:
             MemoryBundle with episodes, facets, facetpoints, entities, scores
@@ -88,19 +91,19 @@ class MemoryOrchestrator:
         router_result = classify(text)
 
         if mode == "lexical":
-            return self._query_lexical(text, router_result, top_k)
+            return self._query_lexical(text, router_result, top_k, hybrid_weight)
 
         if mode == "procedural":
             return self._query_procedural(text, router_result, top_k)
 
         if mode == "unified":
             # Try episodic first, then merge with lexical
-            episodic_bundle = self._query_episodic(text, router_result, top_k, max_hops)
-            lexical_bundle = self._query_lexical(text, router_result, top_k)
+            episodic_bundle = self._query_episodic(text, router_result, top_k, max_hops, hybrid_weight)
+            lexical_bundle = self._query_lexical(text, router_result, top_k, hybrid_weight)
             return self._merge_bundles(episodic_bundle, lexical_bundle)
 
         # Default: episodic (Cone Graph Bundle Search)
-        return self._query_episodic(text, router_result, top_k, max_hops)
+        return self._query_episodic(text, router_result, top_k, max_hops, hybrid_weight)
 
     # ── Episodic (Cone Graph Bundle Search) ───────────────────────────────
 
@@ -110,6 +113,7 @@ class MemoryOrchestrator:
         router_result: RouterResult,
         top_k: int,
         max_hops: int,
+        hybrid_weight: float = 0.3,
     ) -> MemoryBundle:
         """
         M-flow's primary retrieval mode:
@@ -122,11 +126,11 @@ class MemoryOrchestrator:
         layer = router_result.layer
 
         # Find anchor candidates at the appropriate layer
-        anchor_ids = self._find_anchors(text, layer, limit=20)
+        anchor_ids = self._find_anchors(text, layer, limit=20, hybrid_weight=hybrid_weight)
 
         if not anchor_ids:
             # Fallback: try broader search
-            anchor_ids = self._find_anchors(text, RetrievalLayer.EPISODE, limit=10)
+            anchor_ids = self._find_anchors(text, RetrievalLayer.EPISODE, limit=10, hybrid_weight=hybrid_weight)
             if not anchor_ids:
                 return self._empty_bundle(router_result, "episodic")
 
@@ -159,6 +163,7 @@ class MemoryOrchestrator:
         text: str,
         router_result: RouterResult,
         top_k: int,
+        hybrid_weight: float = 0.3,
     ) -> MemoryBundle:
         """Simple keyword search — fallback mode."""
         # Search FacetPoints for keyword matches
@@ -218,6 +223,7 @@ class MemoryOrchestrator:
         text: str,
         layer: RetrievalLayer,
         limit: int = 20,
+        hybrid_weight: float = 0.3,
     ) -> list[str]:
         """
         Find entry-point anchor IDs at the specified layer.
@@ -236,7 +242,7 @@ class MemoryOrchestrator:
                 RetrievalLayer.UNKNOWN: "all",
             }
             search_type = type_map.get(layer, "all")
-            vec_results = self.vector_index.search(text, node_type=search_type, top_k=limit)
+            vec_results = self.vector_index.search(text, node_type=search_type, top_k=limit, hybrid_weight=hybrid_weight)
             if vec_results:
                 return [nid for _, nid, _ in vec_results]
 

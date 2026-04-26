@@ -237,9 +237,19 @@ class ConeVectorIndex:
         query: str,
         node_type: str = "all",
         top_k: int = 5,
+        hybrid_weight: float = 0.3,
     ) -> list[tuple[str, str, float]]:
         """
         Search for similar nodes.
+
+        Args:
+            query: Search query text.
+            node_type: "entity" | "facetpoint" | "episode" | "all".
+            top_k: Maximum number of results to return.
+            hybrid_weight: Weight for BM25 component in hybrid scoring.
+                           0.0 = pure TF-IDF vector search.
+                           1.0 = pure BM25 keyword search.
+                           Default 0.3 means 0.7*TF-IDF + 0.3*BM25_norm.
 
         Returns:
             List of (node_type, node_id, score) sorted by similarity descending.
@@ -276,7 +286,7 @@ class ConeVectorIndex:
             search_index(self._episode_index, self.episode_ids, "episode")
 
         # ── BM25 keyword boost (rank_bm25 scores keyword matches better than TF-IDF) ──
-        if BM25_AVAILABLE and self._bm25_index and self._bm25_corpus:
+        if hybrid_weight > 0 and hybrid_weight < 1 and BM25_AVAILABLE and self._bm25_index and self._bm25_corpus:
             try:
                 bm25_scores = self._bm25_index.get_scores(query.split())
                 # Merge BM25 scores into existing results
@@ -296,9 +306,9 @@ class ConeVectorIndex:
                             self.episode_ids.index(nid) if nid in self.episode_ids else -1
                         )
                     if 0 <= bm25_idx < len(bm25_scores):
-                        # Hybrid: 0.7 * TF-IDF cosine + 0.3 * normalized BM25
+                        # Hybrid: (1 - hybrid_weight) * TF-IDF cosine + hybrid_weight * BM25_norm
                         bm25_norm = float(bm25_scores[bm25_idx]) / (max(bm25_scores) + 1e-9)
-                        hybrid = 0.7 * existing_score + 0.3 * bm25_norm
+                        hybrid = (1 - hybrid_weight) * existing_score + hybrid_weight * bm25_norm
                         results[idx] = (ntype, nid, hybrid)
             except Exception as e:
                 import warnings
@@ -479,6 +489,7 @@ if __name__ == "__main__":
     parser.add_argument("--search", help="Search query")
     parser.add_argument("--type", default="all", choices=["entity", "facetpoint", "episode", "all"])
     parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--hybrid-weight", type=float, default=0.3, help="BM25 weight in hybrid scoring (0.0-1.0)")
     args = parser.parse_args()
 
     index = ConeVectorIndex()
@@ -503,7 +514,7 @@ if __name__ == "__main__":
         if not index.load():
             print("No index found. Run --build first.")
             exit(1)
-        results = index.search(args.search, node_type=args.type, top_k=args.top_k)
+        results = index.search(args.search, node_type=args.type, top_k=args.top_k, hybrid_weight=args.hybrid_weight)
         print(f"Search: '{args.search}' (type={args.type})")
         for ntype, nid, score in results:
             print(f"  [{ntype}] {nid[:12]} score={score:.4f}")

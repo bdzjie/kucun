@@ -7,7 +7,7 @@ Reads memory_query_trigger.json (written by agent on user query)
   → canvas polls and displays
 
 Usage (run as subprocess from agent):
-  python memory_query_bridge.py "deadline communication" [episodic|lexical|unified]
+  python memory_query_bridge.py "deadline communication" [episodic|lexical|unified] [--hybrid-weight 0.3]
 """
 
 import sys, json, shutil
@@ -33,7 +33,17 @@ def main():
         print("ERROR: empty query")
         sys.exit(0)
 
-    mode = sys.argv[2] if len(sys.argv) > 2 else "episodic"
+    # Parse mode and optional hybrid_weight
+    mode = "episodic"
+    hybrid_weight = 0.3
+    for arg in sys.argv[2:]:
+        if arg in ("episodic", "lexical", "unified", "procedural"):
+            mode = arg
+        elif arg.startswith("--hybrid-weight="):
+            try:
+                hybrid_weight = float(arg.split("=", 1)[1])
+            except (ValueError, IndexError):
+                pass
 
     # Add workspace to path
     sys.path.insert(0, str(WORKSPACE))
@@ -42,7 +52,7 @@ def main():
         from modules.memory.memory_orchestrator import MemoryOrchestrator
 
         orch = MemoryOrchestrator()
-        bundle = orch.query(query_text, mode=mode, top_k=5)
+        bundle = orch.query(query_text, mode=mode, top_k=5, hybrid_weight=hybrid_weight)
 
         # Serialize results for canvas
         results = []
@@ -65,6 +75,7 @@ def main():
         state = {
             "query": query_text,
             "mode": mode,
+            "hybrid_weight": hybrid_weight,
             "retrieval_mode": bundle.retrieval_mode,
             "router_result": {
                 "layer": bundle.router_result.layer.value,
@@ -82,7 +93,7 @@ def main():
         canvas_state = CANVAS_DIR / "memory_query_state.json"
         shutil.copy2(STATE_FILE, canvas_state)
 
-        print(f"OK: {len(results)} episodes, mode={bundle.retrieval_mode}, layer={bundle.router_result.layer.value}")
+        print(f"OK: {len(results)} episodes, mode={bundle.retrieval_mode}, layer={bundle.router_result.layer.value}, hybrid_weight={hybrid_weight}")
 
     except Exception as e:
         error_state = {"error": str(e), "query": query_text}
