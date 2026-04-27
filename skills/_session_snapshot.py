@@ -48,7 +48,13 @@ class SessionSnapshot:
 
     # Core memory: most important facts (key = block label)
     # Analogous to Letta's core_memory blocks
-    core_memory: dict[str, str] = field(default_factory=dict)
+    # Each entry: {"value": str, "provenance": "user_said|inferred|external_api|derived"}
+    core_memory: dict[str, dict] = field(default_factory=dict)
+
+
+    # Provenance tracker for core_memory blocks
+    # Maps label -> provenance source
+    provenance: dict[str, str] = field(default_factory=dict)
 
     # Active skill context (not full handler state, just last-known context)
     # skill_id -> {last_query, mode, active_params, last_result_summary}
@@ -71,12 +77,36 @@ class SessionSnapshot:
             self.created_at = datetime.now(timezone.utc).isoformat()
         self.last_active_at = datetime.now(timezone.utc).isoformat()
 
+    def set_core_memory(self, label: str, value: str, provenance: str = "inferred") -> None:
+        """
+        Set a core memory block with provenance tracking.
+
+        provenance: user_said | inferred | external_api | derived
+        """
+        valid = {"user_said", "inferred", "external_api", "derived"}
+        if provenance not in valid:
+            provenance = "inferred"
+        self.core_memory[label] = {"value": value, "provenance": provenance}
+        self.provenance[label] = provenance
+
+    def get_core_memory(self, label: str) -> Optional[str]:
+        """Get core memory block value."""
+        block = self.core_memory.get(label)
+        return block["value"] if block else None
+
+    def get_provenance(self, label: str) -> Optional[str]:
+        """Get provenance for a block."""
+        return self.provenance.get(label)
+
     def touch(self):
         """Update last_active_at timestamp."""
         self.last_active_at = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        # Preserve provenance as flat dict for backward compat
+        d["provenance"] = self.provenance
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "SessionSnapshot":
@@ -85,6 +115,18 @@ class SessionSnapshot:
         if version != cls.__annotations__.get("version", "2026-04-27"):
             # Future: run migration functions based on version
             pass
+        # Handle core_memory that might be stored as dicts (new format) or strings (old format)
+        core_mem = {}
+        provenance = d.pop("provenance", {})
+        for k, v in d.get("core_memory", {}).items():
+            if isinstance(v, str):
+                core_mem[k] = {"value": v, "provenance": provenance.get(k, "inferred")}
+            else:
+                core_mem[k] = v
+        d["core_memory"] = core_mem
+        # Handle provenance field
+        if "provenance" not in d.get("__annotations__", {}):
+            d["provenance"] = provenance
         return cls(**{k: v for k, v in d.items() if k in cls.__annotations__})
 
 

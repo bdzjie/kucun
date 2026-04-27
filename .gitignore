@@ -3,3 +3,8 @@ modules/__pycache__/
 modules/search/__pycache__/
 **/__pycache__/
 *.pyc
+memory/_skill_telemetry.db
+memory/_retrieval_quality.jsonl
+memory/_event_log.jsonl
+memory/_reflexion_buffer.jsonl
+memory/_skill_registry.json
