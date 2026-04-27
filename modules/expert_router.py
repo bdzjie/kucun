@@ -18,6 +18,7 @@ import json
 import time
 from pathlib import Path
 from typing import Literal
+from dataclasses import dataclass
 
 # ============================================================================
 # Task / Query Types
@@ -106,6 +107,129 @@ EXPERTS: dict[str, dict] = {
         "weight": 0.9,
     },
 }
+
+# ============================================================================
+# Fallback Chain — skill_id → fallback_skill_id
+# When a skill fails (circuit open), the fallback is tried instead.
+# ============================================================================
+
+FALLBACK_CHAIN: dict[str, str] = {
+    # invest → web-scraping: financial data fails, fall back to web search
+    "invest": "web-scraping",
+    # web-scraping → agent-browser: simple scrape fails, try full browser agent
+    "web-scraping": "agent-browser",
+    # cone-memory → session-search: graph recall fails, fall back to session search
+    "cone-memory": "session-search",
+    # Any skill not listed has no fallback (returns None)
+}
+
+
+def get_fallback_for(skill_id: str) -> str | None:
+    """Return the fallback skill for a given skill, or None."""
+    return FALLBACK_CHAIN.get(skill_id)
+
+
+def get_fallback_chain(skill_ids: list[str]) -> list[tuple[str, str | None]]:
+    """
+    Return [(skill_id, fallback_skill_id), ...] for a list of skills.
+    Falls through the full chain: invest → web-scraping → agent-browser
+    """
+    result = []
+    for skill_id in skill_ids:
+        chain = [skill_id]
+        current = skill_id
+        while current in FALLBACK_CHAIN:
+            fb = FALLBACK_CHAIN[current]
+            if fb in chain:  # prevent infinite loop
+                break
+            chain.append(fb)
+            current = fb
+        result.append((skill_id, chain[1] if len(chain) > 1 else None))
+    return result
+
+
+# ============================================================================
+# Skill Executor with Fallback + Circuit Breaker + Telemetry
+# ============================================================================
+
+import time as time_module
+
+
+def run_skill_with_fallback(
+    skill_id: str,
+    fn,
+    fallback_fn=None,
+    record_to_telemetry: bool = True,
+) -> "SkillRunResult":
+    """
+    Execute a skill with circuit breaker, fallback chain, and telemetry.
+
+    Args:
+        skill_id: which skill is being called
+        fn: primary callable (no args)
+        fallback_fn: fallback callable (no args), optional
+        record_to_telemetry: whether to write to skill_telemetry DB
+
+    Returns SkillRunResult(status, value, used_fallback, skill_tried)
+    """
+    try:
+        from skills._circuit_breaker import CircuitBreakerStore, CircuitState
+        from skills._skill_telemetry import record_invocation
+    except ImportError:
+        # Fallback if skill infra not available
+        try:
+            result = fn()
+            return SkillRunResult(status="ok", value=result, used_fallback=False, skill_tried=skill_id)
+        except Exception as e:
+            if fallback_fn:
+                return SkillRunResult(status="fallback", value=fallback_fn(), used_fallback=True, skill_tried=get_fallback_for(skill_id))
+            return SkillRunResult(status="error", value=e, used_fallback=False, skill_tried=skill_id)
+
+    cb_store = CircuitBreakerStore()
+    depth = "normal"
+
+    def _record(success: bool, latency_ms: float = 0.0, error: Exception = None):
+        if record_to_telemetry:
+            try:
+                record_invocation(
+                    skill_id=skill_id,
+                    success=success,
+                    latency_ms=latency_ms,
+                    error_type=type(error).__name__ if error else None,
+                    error_msg=str(error) if error else None,
+                    depth=depth,
+                )
+            except Exception:
+                pass  # never let telemetry break execution
+
+    start = time_module.time()
+    cb_result = cb_store.call(skill_id, fn, fallback_fn=fallback_fn)
+    latency_ms = (time_module.time() - start) * 1000
+
+    if cb_result.used_fallback:
+        fb_skill = get_fallback_for(skill_id)
+        _record(success=False, latency_ms=latency_ms, error=cb_result.value if isinstance(cb_result.value, Exception) else None)
+        return SkillRunResult(
+            status="fallback",
+            value=cb_result.value,
+            used_fallback=True,
+            skill_tried=fb_skill or skill_id,
+        )
+    elif isinstance(cb_result.value, Exception):
+        _record(success=False, latency_ms=latency_ms, error=cb_result.value)
+        return SkillRunResult(status="error", value=cb_result.value, used_fallback=False, skill_tried=skill_id)
+    else:
+        _record(success=True, latency_ms=latency_ms)
+        return SkillRunResult(status="ok", value=cb_result.value, used_fallback=False, skill_tried=skill_id)
+
+
+@dataclass
+class SkillRunResult:
+    status: str   # "ok" | "error" | "fallback"
+    value: any
+    used_fallback: bool
+    skill_tried: str  # which skill actually ran
+
 
 # ============================================================================
 # Depth Configuration (对应 OpenMythos 的 max_loop_iters)
