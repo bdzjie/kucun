@@ -26,6 +26,14 @@ triggers:
   - 投资建议
   - 投资顾问
 command-dispatch: tool
+version: "2026-04-20"
+installed_size: "~40KB"
+last_tested: "2026-04-27"
+dependencies: []
+permissions:
+  network: true
+  filesystem: false
+  exec: false
 ---
 
 # Invest — AI Investment Advisory Council v4
